@@ -1,0 +1,22 @@
+/** Fields requested from Sentry Discover / Events API for session investigation. */
+export const SENTRY_DISCOVER_FIELDS = [
+  "id",
+  "timestamp",
+  "message",
+  "user.id",
+  "user.email",
+  "tags[type]",
+  "tags[status]",
+  "tags[action_type]",
+  "tags[service]",
+  "tags[method]",
+  "tags[endpoint]",
+  "tags[http_status]",
+  "tags[session_id]",
+  "tags[action_index]",
+  "tags[order_id]",
+  "tags[failure_reason]",
+  "tags[role]",
+  "tags[account_type]",
+  "project.name",
+] as const;
