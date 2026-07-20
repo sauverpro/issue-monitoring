@@ -16,6 +16,7 @@ import { sessionsRouter } from "./routes/sessions.js";
 import { endpointMetricsRouter } from "./routes/endpointMetrics.js";
 import { apiSessionsRouter } from "./routes/apiSessions.js";
 import { issuesRouter } from "./routes/issues.js";
+import { powerbiRouter } from "./routes/powerbi.js";
 import { startSentrySyncScheduler } from "./services/sentrySync.js";
 
 const app = express();
@@ -50,6 +51,7 @@ app.use(sessionsRouter(pool));
 app.use(endpointMetricsRouter(pool));
 app.use(apiSessionsRouter(pool));
 app.use(issuesRouter(pool));
+app.use(powerbiRouter(pool));
 
 startRecoveryScheduler(pool);
 startSentrySyncScheduler(pool);
