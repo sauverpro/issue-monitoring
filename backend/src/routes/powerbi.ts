@@ -57,7 +57,7 @@ export function powerbiRouter(pool: Pool): IRouter {
    * 1. High-Level Executive KPI Summary (PowerBI Cards & Dashboards)
    * GET /api/powerbi/summary?window=24h&format=json|csv
    */
-  r.get("/api/powerbi/summary", async (req, res) => {
+  r.get(["/api/powerbi/summary", "/powerbi/summary"], async (req, res) => {
     try {
       const windowId = windowSchema.parse(req.query.window);
       const interval = WINDOWS_SQL[windowId] ?? "24 hours";
@@ -121,7 +121,7 @@ export function powerbiRouter(pool: Pool): IRouter {
    * 2. Granular API Events Telemetry Feed (PowerBI Fact Table)
    * GET /api/powerbi/events?startDate=...&endDate=...&service=DDIN|MVEND&outcome=SUCCESS|FAILURE&limit=1000&format=json|csv
    */
-  r.get("/api/powerbi/events", async (req, res) => {
+  r.get(["/api/powerbi/events", "/powerbi/events"], async (req, res) => {
     try {
       const limit = Math.min(Math.max(1, Number(req.query.limit) || 500), 5000);
       const offset = Math.max(0, Number(req.query.offset) || 0);
@@ -192,7 +192,7 @@ export function powerbiRouter(pool: Pool): IRouter {
    * 3. User Session Performance Feed (PowerBI Sessions Dimension Table)
    * GET /api/powerbi/sessions?hasFailures=true&limit=500&format=json|csv
    */
-  r.get("/api/powerbi/sessions", async (req, res) => {
+  r.get(["/api/powerbi/sessions", "/powerbi/sessions"], async (req, res) => {
     try {
       const limit = Math.min(Math.max(1, Number(req.query.limit) || 500), 5000);
       const offset = Math.max(0, Number(req.query.offset) || 0);
@@ -270,7 +270,7 @@ export function powerbiRouter(pool: Pool): IRouter {
    * 4. Integrated & Upstream API Health SLA Table (PowerBI Vendor Report)
    * GET /api/powerbi/upstream-health?window=24h&format=json|csv
    */
-  r.get("/api/powerbi/upstream-health", async (req, res) => {
+  r.get(["/api/powerbi/upstream-health", "/powerbi/upstream-health"], async (req, res) => {
     try {
       const windowId = windowSchema.parse(req.query.window);
       const interval = WINDOWS_SQL[windowId] ?? "24 hours";
@@ -329,7 +329,7 @@ export function powerbiRouter(pool: Pool): IRouter {
    * 5. Incident & Outage Log Feed (PowerBI SLA Log)
    * GET /api/powerbi/incidents?format=json|csv
    */
-  r.get("/api/powerbi/incidents", async (req, res) => {
+  r.get(["/api/powerbi/incidents", "/powerbi/incidents"], async (req, res) => {
     try {
       const querySql = `
         SELECT
