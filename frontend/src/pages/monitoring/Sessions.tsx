@@ -102,7 +102,7 @@ export function MonitoringSessions() {
       setLoading(true);
       try {
         const res = await apiFetch<SessionsListResponse>(
-          `/api/sessions?${q.toString()}`
+          `/sessions?${q.toString()}`
         );
         const list = Array.isArray(res) ? res : (res.items ?? []);
         if (!cancelled) {
