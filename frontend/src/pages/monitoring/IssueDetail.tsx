@@ -32,7 +32,7 @@ export function MonitoringIssueDetail() {
       setLoading(true);
       try {
         const res = await apiFetch<SentryIssueDetail>(
-          `/issues/${encodeURIComponent(issueId)}`
+          `/api/issues/${encodeURIComponent(issueId)}`
         );
         if (!cancelled) {
           setIssue(res);

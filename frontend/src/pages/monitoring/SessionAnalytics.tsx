@@ -27,7 +27,7 @@ export function SessionAnalyticsPage() {
       setLoading(true);
       try {
         const res = await apiFetch<SessionAnalytics>(
-          `/sessions/analytics?days=${days}`
+          `/api/sessions/analytics?days=${days}`
         );
         if (!cancelled) {
           setData(res);

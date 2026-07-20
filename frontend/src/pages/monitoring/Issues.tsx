@@ -17,7 +17,7 @@ export function MonitoringIssues() {
       setLoading(true);
       try {
         const res = await apiFetch<{ issues: SentryIssue[]; hasMore: boolean }>(
-          `/issues?page=${page}&limit=20`
+          `/api/issues?page=${page}&limit=20`
         );
         if (!cancelled) {
           setIssues(res.issues);

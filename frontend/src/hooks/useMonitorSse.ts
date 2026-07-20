@@ -21,7 +21,8 @@ export function useMonitorSse(
     const connect = () => {
       const token = getToken();
       if (!token) return;
-      const url = `${window.location.origin}${BASE}/stream?token=${encodeURIComponent(token)}`;
+      const baseUrl = BASE.startsWith("http") ? BASE : `${window.location.origin}${BASE}`;
+      const url = `${baseUrl}/stream?token=${encodeURIComponent(token)}`;
       es = new EventSource(url);
       es.onopen = () => {
         if (cancelled) return;

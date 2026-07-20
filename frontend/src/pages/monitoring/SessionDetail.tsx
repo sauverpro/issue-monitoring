@@ -44,10 +44,10 @@ export function MonitoringSessionDetail() {
       try {
         const [actionsRes, failuresRes] = await Promise.all([
           apiFetch<ActionsResponse>(
-            `/sessions/${encodeURIComponent(sessionId)}/actions`
+            `/api/sessions/${encodeURIComponent(sessionId)}/actions`
           ),
           apiFetch<{ failures: SessionFailure[] }>(
-            `/sessions/${encodeURIComponent(sessionId)}/failures`
+            `/api/sessions/${encodeURIComponent(sessionId)}/failures`
           ),
         ]);
         if (!cancelled) {
