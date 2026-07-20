@@ -18,7 +18,9 @@ export async function runSentryDiscoverSync(pool: Pool): Promise<void> {
   for (const f of DISCOVER_FIELDS) {
     params.append("field", f);
   }
-  params.set("query", discoverQuery);
+  if (discoverQuery) {
+    params.set("query", discoverQuery);
+  }
   params.set("sort", "-timestamp");
   params.set("per_page", "100");
   params.set("statsPeriod", "24h");

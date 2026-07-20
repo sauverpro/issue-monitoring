@@ -78,12 +78,12 @@ export type SentryIssue = {
   permalink: string;
 };
 
-import type {
-  SessionAction,
-  SessionActionsResponse,
-  SessionSummary,
-  SessionUser,
-} from "./session";
+export type SessionActionsResponse = {
+  sessionId: string;
+  user: SessionUser;
+  summary: SessionSummary;
+  actions: SessionAction[];
+};
 
 export type SentryIssueDetail = SentryIssue & {
   relatedSessionId: string | null;
@@ -91,5 +91,3 @@ export type SentryIssueDetail = SentryIssue & {
   project: string | null;
   session?: SessionActionsResponse | null;
 };
-
-export type { SessionActionsResponse, SessionAction, SessionSummary, SessionUser };

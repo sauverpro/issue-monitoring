@@ -35,7 +35,7 @@ app.use(
 app.use(sentryWebhookRouter());
 app.use(express.json({ limit: "1mb" }));
 
-app.get("/healthz", (_req, res) => {
+app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 

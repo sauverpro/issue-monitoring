@@ -22,6 +22,40 @@ function str(row: SentryDiscoverRow, key: string): string {
   return String(v).trim();
 }
 
+function hash32(input: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function deriveSessionId(
+  row: SentryDiscoverRow,
+  userId: string,
+  userEmail: string,
+  occurredAt: Date,
+  eventId: string
+): string {
+  const direct = [
+    tag(row, "session_id"),
+    tag(row, "session"),
+    str(row, "session.id"),
+    str(row, "contexts.trace.trace_id"),
+  ].find((v) => v.length > 0);
+  if (direct) return direct;
+
+  const userKey = userId || userEmail;
+  if (userKey) {
+    const bucketMs = 30 * 60 * 1000;
+    const bucket = Math.floor(occurredAt.getTime() / bucketMs);
+    return `usr_${hash32(userKey)}_${bucket}`;
+  }
+
+  return `evt_${eventId}`;
+}
+
 export function parseHttpStatus(raw: string): { status_code: number; isOther: boolean } {
   const t = raw.trim().toUpperCase();
   if (!t || t === "PARSING_ERROR" || t === "NETWORK_ERROR" || t === "TIMEOUT") {
@@ -46,6 +80,9 @@ function deriveOutcome(
   statusCode: number,
   isOther: boolean
 ): "SUCCESS" | "FAILURE" | "OTHER" {
+  if (!sentryType && !status && (isOther || statusCode === 0)) {
+    return "FAILURE";
+  }
   if (isOther || statusCode === 0) return "OTHER";
   const st = status.toLowerCase();
   if (st === "success" || sentryType === "api_success") return "SUCCESS";
@@ -63,14 +100,16 @@ export function normalizeSentryRow(row: SentryDiscoverRow): PersistEventInput | 
     if (sentryType.startsWith("external_")) return null;
   }
 
-  const requestUrl = tag(row, "endpoint");
-  const sessionId = tag(row, "session_id");
-  if (!requestUrl || !sessionId) {
-    return null;
-  }
+  const requestUrlTag = tag(row, "endpoint");
 
   const sentryEventId = str(row, "id");
   if (!sentryEventId) return null;
+
+  const requestUrl =
+    requestUrlTag ||
+    str(row, "transaction") ||
+    str(row, "title") ||
+    `/sentry/${(str(row, "project.name") || "event").toLowerCase()}`;
 
   let pathname = requestUrl;
   let host = "";
@@ -87,18 +126,25 @@ export function normalizeSentryRow(row: SentryDiscoverRow): PersistEventInput | 
   const statusTag = tag(row, "status");
   const outcome = deriveOutcome(statusTag, sentryType, status_code, isOther);
 
-  const appService = tag(row, "service") || "unknown";
+  const appService =
+    tag(row, "service") || str(row, "project.name") || "unknown";
   const actionIndexRaw = tag(row, "action_index");
   const action_index = actionIndexRaw ? parseInt(actionIndexRaw, 10) : undefined;
 
   const timestamp = str(row, "timestamp");
-  const occurred_at = timestamp
-    ? new Date(timestamp).toISOString()
-    : new Date().toISOString();
+  const occurredDate = timestamp ? new Date(timestamp) : new Date();
+  const occurred_at = occurredDate.toISOString();
 
   const failureReason = tag(row, "failure_reason") || undefined;
-  const userId = str(row, "user.id") || undefined;
+  const userId = str(row, "user.id") || tag(row, "user_id") || undefined;
   const userEmail = str(row, "user.email") || undefined;
+  const sessionId = deriveSessionId(
+    row,
+    userId ?? "",
+    userEmail ?? "",
+    occurredDate,
+    sentryEventId
+  );
 
   return {
     service: mapAppServiceToRollup(appService),

@@ -4,6 +4,73 @@ import { ArrowRight } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type { SessionListItem } from "@/types/session";
 
+type SessionsListResponse =
+  | SessionListItem[]
+  | {
+      items?: unknown[];
+    };
+
+function asValidIso(value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") return "";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString();
+}
+
+function normalizeSessionItem(row: unknown): SessionListItem | null {
+  if (!row || typeof row !== "object") return null;
+  const r = row as Record<string, unknown>;
+
+  const sessionId =
+    (typeof r.sessionId === "string" ? r.sessionId : "") ||
+    (typeof r.session_id === "string" ? r.session_id : "");
+  if (!sessionId) return null;
+
+  const startedAt =
+    asValidIso(r.startedAt) ||
+    asValidIso(r.started_at) ||
+    asValidIso(r.lastActivity) ||
+    asValidIso(r.ended_at);
+  const lastActivity =
+    asValidIso(r.lastActivity) ||
+    asValidIso(r.ended_at) ||
+    startedAt;
+
+  return {
+    sessionId,
+    userEmail:
+      typeof r.userEmail === "string"
+        ? r.userEmail
+        : typeof r.user_email === "string"
+          ? r.user_email
+          : null,
+    role: typeof r.role === "string" ? r.role : null,
+    accountType:
+      typeof r.accountType === "string"
+        ? r.accountType
+        : typeof r.account_type === "string"
+          ? r.account_type
+          : null,
+    totalActions:
+      typeof r.totalActions === "number"
+        ? r.totalActions
+        : typeof r.total_events === "number"
+          ? r.total_events
+          : 0,
+    failures:
+      typeof r.failures === "number"
+        ? r.failures
+        : typeof r.failure_events === "number"
+          ? r.failure_events
+          : 0,
+    startedAt,
+    lastActivity,
+  };
+}
+
+function displayIso(value: string): string {
+  return asValidIso(value) || "-";
+}
+
 export function MonitoringSessions() {
   const [items, setItems] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,11 +101,17 @@ export function MonitoringSessions() {
     (async () => {
       setLoading(true);
       try {
-        const res = await apiFetch<SessionListItem[]>(
+        const res = await apiFetch<SessionsListResponse>(
           `/api/sessions?${q.toString()}`
         );
+        const list = Array.isArray(res) ? res : (res.items ?? []);
         if (!cancelled) {
-          setItems(res);
+          const normalized = Array.isArray(list)
+            ? list
+                .map((row) => normalizeSessionItem(row))
+                .filter((row): row is SessionListItem => row !== null)
+            : [];
+          setItems(normalized);
           setErr(null);
         }
       } catch (e) {
@@ -185,10 +258,10 @@ export function MonitoringSessions() {
                     {s.failures}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-400">
-                    {new Date(s.startedAt).toISOString()}
+                    {displayIso(s.startedAt)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-400">
-                    {new Date(s.lastActivity).toISOString()}
+                    {displayIso(s.lastActivity)}
                   </td>
                   <td className="px-3 py-2">
                     <Link

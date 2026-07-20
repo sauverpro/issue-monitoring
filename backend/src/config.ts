@@ -51,7 +51,7 @@ export const config = {
       ""
     ),
     webhookSecret: process.env.SENTRY_WEBHOOK_SECRET?.trim() || "",
-    syncIntervalMs: Number(process.env.SENTRY_SYNC_INTERVAL_MS) || 180_000,
-    discoverQuery: process.env.SENTRY_DISCOVER_QUERY?.trim() || "has:tags[type]",
+    syncIntervalMs: Number(process.env.SENTRY_SYNC_INTERVAL_MS) || 300_000,
+    discoverQuery: process.env.SENTRY_DISCOVER_QUERY?.trim() || "",
   },
 };
