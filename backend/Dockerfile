@@ -2,8 +2,8 @@
 FROM node:22-alpine AS builder
 WORKDIR /app
 
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -17,16 +17,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Copy production deps
-COPY package.json ./
-RUN npm install --omit=dev
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
 
 # Copy compiled output
 COPY --from=builder /app/dist ./dist
 
-# Copy migrations (run at startup via entrypoint)
+# Copy migrations (run at startup via scripts/start.js)
 COPY migrations ./migrations
 COPY scripts ./scripts
 
 EXPOSE 3000
 
-CMD ["node", "dist/index.js"]
+# Auto-migrate then start the server
+CMD ["node", "scripts/start.js"]
