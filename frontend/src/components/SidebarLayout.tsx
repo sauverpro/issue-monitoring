@@ -7,6 +7,7 @@ import {
   Bug,
   ChevronLeft,
   ChevronRight,
+  Code2,
   LayoutDashboard,
   ListTree,
   LogOut,
@@ -36,6 +37,10 @@ const monitoringNav: NavItem[] = [
   { to: "/monitoring/issues", label: "Issues", icon: Bug },
   { to: "/monitoring/sessions", label: "Sessions", icon: Users },
   { to: "/monitoring/session-analytics", label: "Analytics", icon: BarChart3 },
+];
+
+const developerNav: NavItem[] = [
+  { to: "/api-docs", label: "Analyst APIs & Docs", icon: Code2 },
 ];
 
 function NavSection({
@@ -123,6 +128,7 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
         <nav className="flex-1 space-y-6 overflow-y-auto p-3">
           <NavSection title="Main" items={mainNav} collapsed={collapsed} />
           <NavSection title="Monitoring" items={monitoringNav} collapsed={collapsed} />
+          <NavSection title="Developer & PowerBI" items={developerNav} collapsed={collapsed} />
         </nav>
 
         <div className="border-t border-zinc-800/80 p-3">

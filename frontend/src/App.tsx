@@ -13,6 +13,7 @@ import { MonitoringSessionDetail } from "@/pages/monitoring/SessionDetail";
 import { SessionAnalyticsPage } from "@/pages/monitoring/SessionAnalytics";
 import { MonitoringIssues } from "@/pages/monitoring/Issues";
 import { MonitoringIssueDetail } from "@/pages/monitoring/IssueDetail";
+import { ApiDocs } from "@/pages/ApiDocs";
 
 function Protected({ children }: { children: ReactNode }) {
   const { auth } = useAuth();
@@ -112,6 +113,14 @@ export default function App() {
         element={
           <Protected>
             <SessionAnalyticsPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/api-docs"
+        element={
+          <Protected>
+            <ApiDocs />
           </Protected>
         }
       />
