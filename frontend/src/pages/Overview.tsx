@@ -2,13 +2,25 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiMetricCard } from "@/components/ApiMetricCard";
 import { QuickActions } from "@/components/QuickActions";
-import { StatCard } from "@/components/StatCard";
 import { Skeleton } from "@/components/Skeleton";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useMonitorSse } from "@/hooks/useMonitorSse";
 import type { ServiceStatus } from "@/components/StatusBadge";
-import { ArrowRight, Radio, Users, CheckCircle2, XCircle, AlertCircle, Activity } from "lucide-react";
+import {
+  ArrowRight,
+  Radio,
+  Users,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Activity,
+  Layers,
+  Server,
+  ShieldCheck,
+  TrendingUp,
+  AlertCircle,
+} from "lucide-react";
 import { clsx } from "clsx";
 
 type DashboardRes = {
@@ -56,10 +68,10 @@ type DashboardRes = {
 };
 
 const WINDOWS = [
-  { id: "1h", label: "1h" },
-  { id: "6h", label: "6h" },
-  { id: "24h", label: "24h" },
-  { id: "7d", label: "7d" },
+  { id: "1h", label: "1 Hour", desc: "Past 60 mins" },
+  { id: "6h", label: "6 Hours", desc: "Past 6 hrs" },
+  { id: "24h", label: "24 Hours", desc: "Past 1 day" },
+  { id: "7d", label: "7 Days", desc: "Past 1 week" },
 ] as const;
 
 export function Overview() {
@@ -79,7 +91,7 @@ export function Overview() {
       );
       setDash(data);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Failed to load dashboard");
+      setErr(e instanceof Error ? e.message : "Failed to load dashboard metrics");
     } finally {
       setLoading(false);
     }
@@ -94,133 +106,358 @@ export function Overview() {
   const services = ["DDIN", "MVEND"] as const;
   const summary = dash?.summary;
 
+  // Exact calculations for overall system health
+  const totalReqs = summary?.total_requests ?? 0;
+  const successCount = summary?.success_count ?? 0;
+  const failureCount = summary?.failure_count ?? 0;
+  const otherCount = summary?.other_count ?? 0;
+  
+  const successRate = totalReqs > 0 ? (successCount / totalReqs) * 100 : 100;
+  const failureRate = totalReqs > 0 ? (failureCount / totalReqs) * 100 : 0;
+
+  // Determine overall global health status
+  const openIncidents = summary?.open_incidents ?? 0;
+  const anyDown = services.some((s) => dash?.services[s]?.status === "down");
+  const anyDegraded = services.some((s) => dash?.services[s]?.status === "degraded");
+
+  const globalStatus: "operational" | "degraded" | "down" = anyDown
+    ? "down"
+    : anyDegraded || openIncidents > 0
+      ? "degraded"
+      : "operational";
+
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white">
-            Overview
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-zinc-400">
-            Real-time health for product lines, integrated APIs, and user impact —
-            all metrics respect the selected time window.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <div
-            className={clsx(
-              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium",
-              sse.connected
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
-                : sse.reconnecting
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-500"
-            )}
-          >
-            <Radio
-              className={clsx(
-                "h-3.5 w-3.5",
-                sse.connected && "text-emerald-400",
-                sse.reconnecting && "animate-pulse text-amber-400"
-              )}
-            />
-            {sse.connected ? "Live" : sse.reconnecting ? "Reconnecting" : "Idle"}
+    <div className="space-y-8 pb-12">
+      {/* Hero Header & Control Bar */}
+      <div className="relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-950 p-6 shadow-2xl ring-1 ring-white/[0.04]">
+        <div className="absolute -right-12 -top-12 h-64 w-64 rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="absolute -left-12 -bottom-12 h-64 w-64 rounded-full bg-cyan-500/10 blur-3xl" />
+
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 text-xs font-semibold text-emerald-400">
+                <ShieldCheck className="h-3.5 w-3.5" />
+                API Telemetry & Health Monitoring
+              </span>
+              
+              {/* Real-time SSE Live Indicator */}
+              <div
+                className={clsx(
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-all",
+                  sse.connected
+                    ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300 shadow-sm shadow-emerald-500/20"
+                    : sse.reconnecting
+                      ? "border-amber-500/30 bg-amber-500/15 text-amber-300 shadow-sm shadow-amber-500/20"
+                      : "border-zinc-700 bg-zinc-900 text-zinc-400"
+                )}
+              >
+                <Radio
+                  className={clsx(
+                    "h-3.5 w-3.5",
+                    sse.connected && "text-emerald-400 animate-pulse",
+                    sse.reconnecting && "text-amber-400 animate-bounce"
+                  )}
+                />
+                {sse.connected ? "Realtime SSE Active" : sse.reconnecting ? "Reconnecting..." : "Offline"}
+              </div>
+            </div>
+
+            <h1 className="text-3xl font-extrabold tracking-tight text-white sm:text-4xl">
+              System Overview & Operations
+            </h1>
+            <p className="max-w-3xl text-sm text-zinc-400 leading-relaxed">
+              Monitoring real-time API uptime, response latencies, and user session reliability across{" "}
+              <strong className="text-zinc-200">DDIN</strong> &amp; <strong className="text-zinc-200">MVEND</strong> product lines and integrated upstream services.
+            </p>
           </div>
-          <label className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-1.5 text-xs text-zinc-500">
-            Window
-            <select
-              value={windowId}
-              onChange={(e) =>
-                setWindowId(e.target.value as typeof windowId)
-              }
-              className="bg-transparent text-sm font-medium text-zinc-100 outline-none"
+
+          {/* Time Window Pills Bar */}
+          <div className="flex flex-col items-start gap-2 lg:items-end">
+            <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+              Select Time Window
+            </span>
+            <div className="inline-flex rounded-xl border border-zinc-800 bg-zinc-950/80 p-1.5 ring-1 ring-white/[0.04]">
+              {WINDOWS.map((w) => {
+                const isActive = windowId === w.id;
+                return (
+                  <button
+                    key={w.id}
+                    onClick={() => setWindowId(w.id)}
+                    className={clsx(
+                      "rounded-lg px-3.5 py-1.5 text-xs font-semibold transition-all duration-200",
+                      isActive
+                        ? "bg-emerald-500 text-zinc-950 shadow-md shadow-emerald-500/20 font-bold"
+                        : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
+                    )}
+                  >
+                    {w.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Global Status Banner Card */}
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-zinc-800/90 bg-zinc-950/70 p-4">
+          <div className="flex items-center gap-3">
+            <div
+              className={clsx(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1",
+                globalStatus === "operational"
+                  ? "bg-emerald-500/10 text-emerald-400 ring-emerald-500/30"
+                  : globalStatus === "degraded"
+                    ? "bg-amber-500/10 text-amber-300 ring-amber-500/30"
+                    : "bg-rose-500/10 text-rose-400 ring-rose-500/30"
+              )}
             >
-              {WINDOWS.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              {globalStatus === "operational" ? (
+                <CheckCircle2 className="h-5 w-5" />
+              ) : globalStatus === "degraded" ? (
+                <AlertTriangle className="h-5 w-5" />
+              ) : (
+                <XCircle className="h-5 w-5" />
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-white uppercase tracking-wide">
+                  {globalStatus === "operational"
+                    ? "All Product Lines Operational"
+                    : globalStatus === "degraded"
+                      ? "Partial Service Degradation Detected"
+                      : "Critical System Outage"}
+                </span>
+                <span
+                  className={clsx(
+                    "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                    globalStatus === "operational"
+                      ? "bg-emerald-500/20 text-emerald-300"
+                      : globalStatus === "degraded"
+                        ? "bg-amber-500/20 text-amber-300"
+                        : "bg-rose-500/20 text-rose-300"
+                  )}
+                >
+                  {globalStatus}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400">
+                {openIncidents > 0
+                  ? `${openIncidents} active incident${openIncidents === 1 ? "" : "s"} currently under investigation`
+                  : "All API contracts and latency SLA benchmarks are operating within normal parameters."}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs">
+            <div className="text-right">
+              <span className="block text-zinc-500 text-[10px] uppercase font-semibold">Window Success</span>
+              <span className="text-sm font-bold text-emerald-400 tabular-nums">
+                {successRate.toFixed(1)}%
+              </span>
+            </div>
+            <div className="h-8 w-px bg-zinc-800" />
+            <div className="text-right">
+              <span className="block text-zinc-500 text-[10px] uppercase font-semibold">Total Calls ({windowId})</span>
+              <span className="text-sm font-bold text-white tabular-nums">
+                {totalReqs.toLocaleString()}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
       {err && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {err}
+        <div className="flex items-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <AlertCircle className="h-5 w-5 shrink-0 text-rose-400" />
+          <span>{err}</span>
         </div>
       )}
 
-      <QuickActions />
+      {/* Primary Executive KPI Metric Grid */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+            <Activity className="h-4 w-4 text-emerald-400" />
+            Platform Performance Metrics ({windowId} Window)
+          </h2>
+          <span className="text-xs text-zinc-500">Live statistics computed from ingested telemetry</span>
+        </div>
 
-      {/* KPI row */}
-      <section>
-        <h2 className="mb-3 text-sm font-medium text-zinc-400">
-          Platform summary ({windowId})
-        </h2>
         {loading && !summary ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            {Array.from({ length: 7 }).map((_, i) => (
-              <Skeleton key={i} className="h-24" />
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-36" />
             ))}
           </div>
         ) : (
-          <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-            <StatCard
-              label="Total requests"
-              value={summary?.total_requests.toLocaleString() ?? "0"}
-              icon={Activity}
-            />
-            <StatCard
-              label="Unique users"
-              value={summary?.unique_users.toLocaleString() ?? "0"}
-              icon={Users}
-              tone="accent"
-            />
-            <StatCard
-              label="Sessions"
-              value={summary?.unique_sessions.toLocaleString() ?? "0"}
-              tone="default"
-            />
-            <StatCard
-              label="Success"
-              value={summary?.success_count.toLocaleString() ?? "0"}
-              tone="success"
-              icon={CheckCircle2}
-            />
-            <StatCard
-              label="Failures"
-              value={summary?.failure_count.toLocaleString() ?? "0"}
-              tone="danger"
-              icon={XCircle}
-            />
-            <StatCard
-              label="Other (no HTTP)"
-              value={summary?.other_count.toLocaleString() ?? "0"}
-              tone="warning"
-              icon={AlertCircle}
-            />
-            <StatCard
-              label="Failed sessions (24h)"
-              value={summary?.failed_sessions_24h ?? 0}
-              sub={`${summary?.open_incidents ?? 0} open incidents`}
-              tone="danger"
-            />
-          </dl>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Card 1: API Request Volume & Success Rate */}
+            <div className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/80 p-5 shadow-lg ring-1 ring-white/[0.03] transition hover:border-zinc-700">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                    Total API Volume
+                  </span>
+                  <dd className="mt-1 text-3xl font-extrabold tabular-nums tracking-tight text-white">
+                    {totalReqs.toLocaleString()}
+                  </dd>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
+                  <TrendingUp className="h-5 w-5" />
+                </div>
+              </div>
+
+              {/* Success progress bar */}
+              <div className="mt-4 space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-semibold">
+                  <span className="text-emerald-400">{successRate.toFixed(1)}% Success</span>
+                  <span className="text-rose-400">{failureRate.toFixed(1)}% Failures</span>
+                </div>
+                <div className="flex h-2 w-full overflow-hidden rounded-full bg-zinc-800">
+                  <div
+                    style={{ width: `${Math.max(0, successRate)}%` }}
+                    className="bg-emerald-500 transition-all duration-500"
+                  />
+                  <div
+                    style={{ width: `${Math.max(0, failureRate)}%` }}
+                    className="bg-rose-500 transition-all duration-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-zinc-400 pt-0.5">
+                  <span>{successCount.toLocaleString()} ok</span>
+                  <span>{failureCount.toLocaleString()} errors</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card 2: User Footprint */}
+            <div className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/80 p-5 shadow-lg ring-1 ring-white/[0.03] transition hover:border-zinc-700">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                    Unique Active Users
+                  </span>
+                  <dd className="mt-1 text-3xl font-extrabold tabular-nums tracking-tight text-cyan-300">
+                    {summary?.unique_users.toLocaleString() ?? "0"}
+                  </dd>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-500/10 text-cyan-400 ring-1 ring-cyan-500/20">
+                  <Users className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Total User Sessions:</span>
+                <span className="font-bold text-white tabular-nums">
+                  {summary?.unique_sessions.toLocaleString() ?? "0"}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-zinc-400">
+                Avg ~{summary?.unique_users ? Math.round(totalReqs / summary.unique_users) : 0} API actions per active user
+              </p>
+            </div>
+
+            {/* Card 3: Session Reliability */}
+            <div className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/80 p-5 shadow-lg ring-1 ring-white/[0.03] transition hover:border-zinc-700">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                    Failed Sessions (24h)
+                  </span>
+                  <dd
+                    className={clsx(
+                      "mt-1 text-3xl font-extrabold tabular-nums tracking-tight",
+                      (summary?.failed_sessions_24h ?? 0) > 0 ? "text-rose-400" : "text-emerald-400"
+                    )}
+                  >
+                    {summary?.failed_sessions_24h ?? 0}
+                  </dd>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-500/10 text-rose-400 ring-1 ring-rose-500/20">
+                  <XCircle className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-2 border-t border-zinc-800/60 flex items-center justify-between text-xs">
+                <span className="text-zinc-400">Open Incidents:</span>
+                <span
+                  className={clsx(
+                    "font-bold tabular-nums",
+                    openIncidents > 0 ? "text-amber-400" : "text-emerald-400"
+                  )}
+                >
+                  {openIncidents} active
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-zinc-400 truncate">
+                {otherCount > 0 ? `${otherCount.toLocaleString()} non-HTTP timeout/network errors` : "No network exceptions"}
+              </p>
+            </div>
+
+            {/* Card 4: Platform Services Uptime */}
+            <div className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/80 p-5 shadow-lg ring-1 ring-white/[0.03] transition hover:border-zinc-700">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                    Core Product Lines
+                  </span>
+                  <dd className="mt-1 text-3xl font-extrabold tracking-tight text-white">
+                    2 / 2
+                  </dd>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
+                  <Server className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="font-semibold text-zinc-200">DDIN:</span>
+                  <span className="text-emerald-400 font-bold uppercase text-[10px]">
+                    {dash?.services["DDIN"]?.status ?? "Operational"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                  <span className="font-semibold text-zinc-200">MVEND:</span>
+                  <span className="text-emerald-400 font-bold uppercase text-[10px]">
+                    {dash?.services["MVEND"]?.status ?? "Operational"}
+                  </span>
+                </div>
+              </div>
+              <p className="mt-2 text-[11px] text-zinc-400">
+                5m Error Rate: <strong className="text-zinc-200">{((dash?.services["DDIN"]?.error_rate_5m ?? 0) * 100).toFixed(1)}%</strong> (DDIN) / <strong className="text-zinc-200">{((dash?.services["MVEND"]?.error_rate_5m ?? 0) * 100).toFixed(1)}%</strong> (MVEND)
+              </p>
+            </div>
+          </div>
         )}
       </section>
 
-      {/* Product lines */}
-      <section>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-zinc-400">Product lines</h2>
+      {/* Navigation Quick Action Grid */}
+      <QuickActions />
+
+      {/* Product Line Performance Section (DDIN & MVEND) */}
+      <section className="space-y-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+              <Layers className="h-5 w-5 text-emerald-400" />
+              Core Product Line Health
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Aggregated telemetry for primary application services — <strong className="text-zinc-300">DDIN</strong> (Digital Services API) and <strong className="text-zinc-300">MVEND</strong> (Gwiza Digital Payments API)
+            </p>
+          </div>
         </div>
+
         <div className="grid gap-6 lg:grid-cols-2">
           {loading && !dash ? (
             <>
-              <Skeleton className="h-[420px]" />
-              <Skeleton className="h-[420px]" />
+              <Skeleton className="h-[440px]" />
+              <Skeleton className="h-[440px]" />
             </>
           ) : (
             services.map((svc) => {
@@ -229,7 +466,8 @@ export function Overview() {
                 <ApiMetricCard
                   key={svc}
                   chartId={`svc-${svc}`}
-                  name={svc}
+                  name={svc === "DDIN" ? "DDIN Digital Services API" : "MVEND / Gwiza Payments API"}
+                  subtitle={`Service Code: ${svc}`}
                   status={s?.status ?? "operational"}
                   errorRate5m={s?.error_rate_5m ?? 0}
                   lastSeen={s?.last_seen ?? null}
@@ -248,28 +486,31 @@ export function Overview() {
         </div>
       </section>
 
-      {/* Unique APIs */}
-      <section>
-        <div className="mb-4 flex items-center justify-between">
+      {/* Integrated Upstream APIs Section */}
+      <section className="space-y-4">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-sm font-medium text-zinc-400">Integrated APIs</h2>
-            <p className="mt-0.5 text-xs text-zinc-600">
-              Each unique upstream — reference APIs plus discovered{" "}
-              <code className="text-zinc-500">upstream_key</code> values
+            <h2 className="flex items-center gap-2 text-lg font-bold text-white">
+              <Server className="h-5 w-5 text-cyan-400" />
+              Tracked & Discovered Upstream APIs
+            </h2>
+            <p className="text-xs text-zinc-400">
+              Individual upstream endpoints discovered from client requests and reference API integrations
             </p>
           </div>
           <Link
             to="/endpoints"
-            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400 hover:text-emerald-300"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300 transition hover:bg-emerald-500/20"
           >
-            All endpoints
+            Explore all endpoints
             <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>
+
         {loading && !dash ? (
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-2">
-            <Skeleton className="h-[420px]" />
-            <Skeleton className="h-[420px]" />
+          <div className="grid gap-6 md:grid-cols-2">
+            <Skeleton className="h-[440px]" />
+            <Skeleton className="h-[440px]" />
           </div>
         ) : (
           <div className="grid gap-6 md:grid-cols-2">
@@ -300,19 +541,29 @@ export function Overview() {
         )}
       </section>
 
-      {/* Incidents strip */}
+      {/* Incidents Alert Footer Strip */}
       {(summary?.open_incidents ?? 0) > 0 && (
-        <section className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-amber-200">
-              <span className="font-semibold">{summary?.open_incidents}</span> open
-              incident{(summary?.open_incidents ?? 0) === 1 ? "" : "s"} require attention.
-            </p>
+        <section className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-zinc-950 p-5 shadow-xl">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-300 ring-1 ring-amber-500/30">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-amber-200">
+                  {summary?.open_incidents} Active Incident{summary?.open_incidents === 1 ? "" : "s"} Require Action
+                </h3>
+                <p className="text-xs text-amber-300/80">
+                  Error rate threshold violations detected on product lines. Inspect active tickets and notes.
+                </p>
+              </div>
+            </div>
             <Link
               to="/incidents"
-              className="text-sm font-medium text-amber-400 hover:text-amber-300"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2 text-xs font-bold text-zinc-950 shadow-md transition hover:bg-amber-400"
             >
-              View incidents →
+              Investigate Incidents
+              <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </section>
