@@ -28,7 +28,7 @@ export function apiSessionsRouter(pool: Pool): IRouter {
 
   r.use(sentryRateLimit);
 
-  r.get("/api/sessions", requireJwt, async (req, res) => {
+  r.get(["/api/sessions", "/session-investigation"], requireJwt, async (req, res) => {
     const parsed = listQuery.safeParse(req.query);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -49,13 +49,13 @@ export function apiSessionsRouter(pool: Pool): IRouter {
     res.json(result.items);
   });
 
-  r.get("/api/sessions/analytics", requireJwt, async (req, res) => {
+  r.get(["/api/sessions/analytics", "/session-investigation/analytics"], requireJwt, async (req, res) => {
     const days = z.coerce.number().int().min(1).max(30).optional().parse(req.query.days) ?? 7;
     const analytics = await getSessionAnalytics(pool, days);
     res.json(analytics);
   });
 
-  r.get("/api/sessions/:sessionId/actions", requireJwt, async (req, res) => {
+  r.get(["/api/sessions/:sessionId/actions", "/session-investigation/:sessionId/actions"], requireJwt, async (req, res) => {
     const parsed = sessionIdSchema.safeParse(req.params.sessionId);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid sessionId" });
@@ -76,7 +76,7 @@ export function apiSessionsRouter(pool: Pool): IRouter {
     }
   });
 
-  r.get("/api/sessions/:sessionId/failures", requireJwt, async (req, res) => {
+  r.get(["/api/sessions/:sessionId/failures", "/session-investigation/:sessionId/failures"], requireJwt, async (req, res) => {
     const parsed = sessionIdSchema.safeParse(req.params.sessionId);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid sessionId" });

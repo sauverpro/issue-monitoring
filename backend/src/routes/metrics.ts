@@ -22,7 +22,7 @@ const SPARK_BUCKET_SEC: Record<string, number> = {
 export function metricsRouter(pool: Pool): IRouter {
   const r = Router();
 
-  r.get("/metrics/services", requireJwt, async (req, res) => {
+  r.get(["/api/metrics/services", "/metrics/services"], requireJwt, async (req, res) => {
     const w = (req.query.window as string) || "1h";
     const interval = WINDOWS[w];
     if (!interval) {
@@ -104,7 +104,7 @@ export function metricsRouter(pool: Pool): IRouter {
     });
   });
 
-  r.get("/metrics/dashboard", requireJwt, async (req, res) => {
+  r.get(["/api/metrics/dashboard", "/metrics/dashboard"], requireJwt, async (req, res) => {
     const w = (req.query.window as string) || "6h";
     if (!WINDOWS[w]) {
       res.status(400).json({ error: "Invalid window" });

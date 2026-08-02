@@ -12,7 +12,7 @@ import { listTrackedApisHealth } from "../services/trackedApisHealth.js";
 
 export function healthRouter(pool: Pool): IRouter {
   const r = Router();
-  r.get("/health/services", requireJwt, async (_req, res) => {
+  r.get(["/api/health/services", "/health/services"], requireJwt, async (_req, res) => {
     const services = await Promise.all(
       SERVICES.map(async (service) => {
         const rate = await getErrorRateLast5Minutes(pool, service);
@@ -29,12 +29,12 @@ export function healthRouter(pool: Pool): IRouter {
     res.json({ services });
   });
 
-  r.get("/health/upstreams", requireJwt, async (_req, res) => {
+  r.get(["/api/health/upstreams", "/health/upstreams"], requireJwt, async (_req, res) => {
     const upstreams = await listUpstreamHealth(pool);
     res.json({ upstreams });
   });
 
-  r.get("/health/tracked-apis", requireJwt, async (_req, res) => {
+  r.get(["/api/health/tracked-apis", "/health/tracked-apis"], requireJwt, async (_req, res) => {
     const tracked_apis = await listTrackedApisHealth(pool);
     res.json({ tracked_apis });
   });

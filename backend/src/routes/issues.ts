@@ -27,7 +27,7 @@ export function issuesRouter(pool: Pool): IRouter {
   const r = Router();
   r.use(sentryRateLimit);
 
-  r.get("/api/issues", requireJwt, async (req, res) => {
+  r.get(["/api/issues", "/issues"], requireJwt, async (req, res) => {
     if (!config.sentry.authToken) {
       res.status(503).json({ error: "Sentry not configured" });
       return;
@@ -69,7 +69,7 @@ export function issuesRouter(pool: Pool): IRouter {
     }
   });
 
-  r.get("/api/issues/:issueId", requireJwt, async (req, res) => {
+  r.get(["/api/issues/:issueId", "/issues/:issueId"], requireJwt, async (req, res) => {
     if (!config.sentry.authToken) {
       res.status(503).json({ error: "Sentry not configured" });
       return;

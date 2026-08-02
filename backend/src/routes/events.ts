@@ -5,7 +5,7 @@ import { enqueueEvent } from "../services/eventQueue.js";
 
 export function eventsRouter(): IRouter {
   const r = Router();
-  r.post("/events", requireIngestKey, (req, res) => {
+  r.post(["/api/events", "/events"], requireIngestKey, (req, res) => {
     const parsed = ingestEventSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });

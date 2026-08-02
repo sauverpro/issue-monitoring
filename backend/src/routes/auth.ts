@@ -11,7 +11,7 @@ const loginSchema = z.object({
 
 export function authRouter(pool: Pool): IRouter {
   const r = Router();
-  r.post("/auth/login", async (req, res) => {
+  r.post(["/api/auth/login", "/auth/login"], async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });

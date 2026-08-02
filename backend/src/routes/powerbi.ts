@@ -51,7 +51,7 @@ const WINDOWS_SQL: Record<string, string> = {
 export function powerbiRouter(pool: Pool): IRouter {
   const r = Router();
 
-  r.use(requireAnalystAuth);
+  r.use(["/api/powerbi", "/powerbi"], requireAnalystAuth);
 
   /**
    * 1. High-Level Executive KPI Summary (PowerBI Cards & Dashboards)
