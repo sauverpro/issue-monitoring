@@ -5,6 +5,66 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/auth/login",
+      "destination": "http://159.198.43.247/auth/login"
+    },
+    {
+      "source": "/api/sessions/analytics",
+      "destination": "http://159.198.43.247/session-investigation/analytics"
+    },
+    {
+      "source": "/api/sessions/:sessionId/actions",
+      "destination": "http://159.198.43.247/session-investigation/:sessionId/actions"
+    },
+    {
+      "source": "/api/sessions/:sessionId/failures",
+      "destination": "http://159.198.43.247/session-investigation/:sessionId/failures"
+    },
+    {
+      "source": "/api/sessions",
+      "destination": "http://159.198.43.247/session-investigation"
+    },
+    {
+      "source": "/api/issues/:issueId",
+      "destination": "http://159.198.43.247/issues/:issueId"
+    },
+    {
+      "source": "/api/issues",
+      "destination": "http://159.198.43.247/issues"
+    },
+    {
+      "source": "/api/metrics/:path*",
+      "destination": "http://159.198.43.247/metrics/:path*"
+    },
+    {
+      "source": "/api/health/:path*",
+      "destination": "http://159.198.43.247/health/:path*"
+    },
+    {
+      "source": "/api/incidents/:path*",
+      "destination": "http://159.198.43.247/incidents/:path*"
+    },
+    {
+      "source": "/api/incidents",
+      "destination": "http://159.198.43.247/incidents"
+    },
+    {
+      "source": "/api/powerbi/:path*",
+      "destination": "http://159.198.43.247/powerbi/:path*"
+    },
+    {
+      "source": "/api/endpoints/:path*",
+      "destination": "http://159.198.43.247/endpoints/:path*"
+    },
+    {
+      "source": "/api/events",
+      "destination": "http://159.198.43.247/events"
+    },
+    {
+      "source": "/api/stream",
+      "destination": "http://159.198.43.247/stream"
+    },
+    {
       "source": "/api/:path*",
       "destination": "http://159.198.43.247/api/:path*"
     },
