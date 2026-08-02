@@ -4,6 +4,25 @@
   "installCommand": "npm install",
   "framework": "vite",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/api/:path*",
+      "destination": "http://159.198.43.247/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "http://159.198.43.247/health"
+    },
+    {
+      "source": "/events/(.*)",
+      "destination": "http://159.198.43.247/events/$1"
+    },
+    {
+      "source": "/stream/(.*)",
+      "destination": "http://159.198.43.247/stream/$1"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
