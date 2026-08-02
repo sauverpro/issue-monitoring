@@ -36,7 +36,7 @@ const tracked = {
 };
 
 export const config = {
-  port: Number(process.env.PORT) || 3000,
+  port: Number(process.env.PORT) || 3002,
   databaseUrl: requireEnv("DATABASE_URL"),
   ingestApiKey: requireEnv("INGEST_API_KEY"),
   jwtSecret: requireEnv("JWT_SECRET"),
