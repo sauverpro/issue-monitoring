@@ -103,7 +103,7 @@ export function Events() {
             ))}
           </ul>
           <p className="mt-3 text-xs text-zinc-500">
-            Use <code className="text-zinc-400">service</code> (DDIN or MVEND) for the product line, and
+            Use <code className="text-zinc-400">service</code> (DDIN, MVEND, or KORALINK) for the product line, and
             a stable <code className="text-zinc-400">upstream_key</code> per integrated API (e.g.{" "}
             <code className="text-zinc-400">ddin_agency_verify</code>).
           </p>
@@ -124,6 +124,7 @@ export function Events() {
             <option value="">All</option>
             <option value="DDIN">DDIN</option>
             <option value="MVEND">MVEND</option>
+            <option value="KORALINK">KORALINK</option>
           </select>
         </label>
         <label className="flex items-center gap-2 text-xs text-zinc-500">

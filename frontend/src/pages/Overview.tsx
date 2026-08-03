@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/Skeleton";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { useMonitorSse } from "@/hooks/useMonitorSse";
-import type { ServiceStatus } from "@/components/StatusBadge";
+import { StatusBadge, type ServiceStatus } from "@/components/StatusBadge";
 import {
   ArrowRight,
   Radio,
@@ -20,6 +20,9 @@ import {
   ShieldCheck,
   TrendingUp,
   AlertCircle,
+  Info,
+  ChevronDown,
+  BookOpen,
 } from "lucide-react";
 import { clsx } from "clsx";
 
@@ -103,7 +106,12 @@ export function Overview() {
 
   const sse = useMonitorSse(load, !!auth.token);
 
-  const services = ["DDIN", "MVEND"] as const;
+  const services = ["DDIN", "MVEND", "KORALINK"] as const;
+  const SERVICE_LABELS: Record<(typeof services)[number], string> = {
+    DDIN: "DDIN Digital Services API",
+    MVEND: "MVEND / Gwiza Payments API",
+    KORALINK: "Koralink Core API",
+  };
   const summary = dash?.summary;
 
   // Exact calculations for overall system health
@@ -168,7 +176,7 @@ export function Overview() {
             </h1>
             <p className="max-w-3xl text-sm text-zinc-400 leading-relaxed">
               Monitoring real-time API uptime, response latencies, and user session reliability across{" "}
-              <strong className="text-zinc-200">DDIN</strong> &amp; <strong className="text-zinc-200">MVEND</strong> product lines and integrated upstream services.
+              <strong className="text-zinc-200">DDIN</strong>, <strong className="text-zinc-200">MVEND</strong> &amp; <strong className="text-zinc-200">KORALINK</strong> product lines and integrated upstream services.
             </p>
           </div>
 
@@ -268,6 +276,126 @@ export function Overview() {
         </div>
       </div>
 
+      {/* Visitor-friendly explainer / glossary — collapsible, defaults closed so it stays out of the way for returning staff */}
+      <details className="group overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/40 transition-colors open:bg-zinc-900/60">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 select-none">
+          <span className="flex items-center gap-2 text-sm font-semibold text-zinc-200">
+            <BookOpen className="h-4 w-4 text-cyan-400" />
+            New here? What am I looking at &amp; how to read this dashboard
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-zinc-500 transition-transform duration-200 group-open:rotate-180" />
+        </summary>
+
+        <div className="space-y-5 border-t border-zinc-800/80 p-5 text-sm text-zinc-400">
+          <div>
+            <h3 className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300">
+              <Info className="h-3.5 w-3.5 text-emerald-400" />
+              What this monitors
+            </h3>
+            <p className="leading-relaxed">
+              Koralink Monitor watches every API call the Koralink marketplace app makes across
+              three backend product lines: <strong className="text-zinc-200">DDIN</strong>{" "}
+              (digital financial services), <strong className="text-zinc-200">MVEND / Gwiza</strong>{" "}
+              (wallet &amp; payments), and <strong className="text-zinc-200">KORALINK</strong> (the
+              core marketplace API). Every request is captured in real time — via direct
+              instrumentation and Sentry — and classified as a{" "}
+              <span className="font-semibold text-emerald-400">success</span>,{" "}
+              <span className="font-semibold text-rose-400">failure</span>, or{" "}
+              <span className="font-semibold text-amber-300">other</span> (network/timeout)
+              outcome, so problems can be caught before too many users notice.
+            </p>
+          </div>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div>
+              <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300">
+                Status colors
+              </h3>
+              <ul className="space-y-2">
+                <li className="flex items-center gap-2">
+                  <StatusBadge status="operational" />
+                  <span>Error rate is low and within normal range</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <StatusBadge status="degraded" />
+                  <span>Elevated errors, or an incident is under investigation</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <StatusBadge status="down" />
+                  <span>Most recent requests to this service are failing</span>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300">
+                Key terms
+              </h3>
+              <dl className="space-y-1.5">
+                <div>
+                  <dt className="inline font-semibold text-zinc-200">P50 (median):</dt>{" "}
+                  <dd className="inline">half of all requests finished faster than this.</dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold text-zinc-200">P95 (tail):</dt>{" "}
+                  <dd className="inline">
+                    95% of requests finished faster than this — a good proxy for the
+                    "worst-case" experience.
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold text-zinc-200">Error rate:</dt>{" "}
+                  <dd className="inline">
+                    share of calls that returned a failure or non-2xx response.
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold text-zinc-200">Open incidents:</dt>{" "}
+                  <dd className="inline">
+                    auto-raised when a service's error rate crosses its threshold; cleared once
+                    it recovers or an analyst resolves it.
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          <div>
+            <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wider text-zinc-300">
+              Where to go next
+            </h3>
+            <ul className="grid gap-1.5 sm:grid-cols-2">
+              <li>
+                <Link to="/incidents" className="font-medium text-emerald-400 hover:underline">
+                  Incidents
+                </Link>{" "}
+                — investigate active or past error-rate breaches.
+              </li>
+              <li>
+                <Link to="/events" className="font-medium text-emerald-400 hover:underline">
+                  Event log
+                </Link>{" "}
+                — see every individual raw API call recorded.
+              </li>
+              <li>
+                <Link to="/endpoints" className="font-medium text-emerald-400 hover:underline">
+                  Endpoints
+                </Link>{" "}
+                — drill into a specific upstream URL or path.
+              </li>
+              <li>
+                <Link
+                  to="/monitoring/sessions"
+                  className="font-medium text-emerald-400 hover:underline"
+                >
+                  Sessions
+                </Link>{" "}
+                — replay one user's sequence of actions end-to-end.
+              </li>
+            </ul>
+          </div>
+        </div>
+      </details>
+
       {err && (
         <div className="flex items-center gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
           <AlertCircle className="h-5 w-5 shrink-0 text-rose-400" />
@@ -297,7 +425,10 @@ export function Overview() {
             <div className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/80 p-5 shadow-lg ring-1 ring-white/[0.03] transition hover:border-zinc-700">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider text-zinc-400"
+                    title="Total number of API calls recorded across DDIN, MVEND, and KORALINK during the selected time window."
+                  >
                     Total API Volume
                   </span>
                   <dd className="mt-1 text-3xl font-extrabold tabular-nums tracking-tight text-white">
@@ -336,7 +467,10 @@ export function Overview() {
             <div className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/80 p-5 shadow-lg ring-1 ring-white/[0.03] transition hover:border-zinc-700">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider text-zinc-400"
+                    title="Count of distinct users who made at least one API call in this window, based on their user ID."
+                  >
                     Unique Active Users
                   </span>
                   <dd className="mt-1 text-3xl font-extrabold tabular-nums tracking-tight text-cyan-300">
@@ -363,7 +497,10 @@ export function Overview() {
             <div className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/80 p-5 shadow-lg ring-1 ring-white/[0.03] transition hover:border-zinc-700">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider text-zinc-400"
+                    title="Sessions in the last 24 hours where the user encountered at least one failed or non-HTTP (other) outcome."
+                  >
                     Failed Sessions (24h)
                   </span>
                   <dd
@@ -400,11 +537,14 @@ export function Overview() {
             <div className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/90 to-zinc-950/80 p-5 shadow-lg ring-1 ring-white/[0.03] transition hover:border-zinc-700">
               <div className="flex items-start justify-between">
                 <div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  <span
+                    className="text-[10px] font-bold uppercase tracking-wider text-zinc-400"
+                    title="Number of backend product lines being tracked and how many currently show a healthy (operational) status."
+                  >
                     Core Product Lines
                   </span>
                   <dd className="mt-1 text-3xl font-extrabold tracking-tight text-white">
-                    2 / 2
+                    {services.length} / {services.length}
                   </dd>
                 </div>
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400 ring-1 ring-emerald-500/20">
@@ -412,24 +552,27 @@ export function Overview() {
                 </div>
               </div>
 
-              <div className="mt-4 flex items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span className="font-semibold text-zinc-200">DDIN:</span>
-                  <span className="text-emerald-400 font-bold uppercase text-[10px]">
-                    {dash?.services["DDIN"]?.status ?? "Operational"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                  <span className="font-semibold text-zinc-200">MVEND:</span>
-                  <span className="text-emerald-400 font-bold uppercase text-[10px]">
-                    {dash?.services["MVEND"]?.status ?? "Operational"}
-                  </span>
-                </div>
+              <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+                {services.map((svc) => (
+                  <div key={svc} className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span className="font-semibold text-zinc-200">{svc}:</span>
+                    <span className="text-emerald-400 font-bold uppercase text-[10px]">
+                      {dash?.services[svc]?.status ?? "Operational"}
+                    </span>
+                  </div>
+                ))}
               </div>
               <p className="mt-2 text-[11px] text-zinc-400">
-                5m Error Rate: <strong className="text-zinc-200">{((dash?.services["DDIN"]?.error_rate_5m ?? 0) * 100).toFixed(1)}%</strong> (DDIN) / <strong className="text-zinc-200">{((dash?.services["MVEND"]?.error_rate_5m ?? 0) * 100).toFixed(1)}%</strong> (MVEND)
+                5m Error Rate:{" "}
+                {services.map((svc, i) => (
+                  <span key={svc}>
+                    <strong className="text-zinc-200">
+                      {((dash?.services[svc]?.error_rate_5m ?? 0) * 100).toFixed(1)}%
+                    </strong>{" "}
+                    ({svc}){i < services.length - 1 ? " / " : ""}
+                  </span>
+                ))}
               </p>
             </div>
           </div>
@@ -439,7 +582,7 @@ export function Overview() {
       {/* Navigation Quick Action Grid */}
       <QuickActions />
 
-      {/* Product Line Performance Section (DDIN & MVEND) */}
+      {/* Product Line Performance Section (DDIN, MVEND & KORALINK) */}
       <section className="space-y-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -448,14 +591,15 @@ export function Overview() {
               Core Product Line Health
             </h2>
             <p className="text-xs text-zinc-400">
-              Aggregated telemetry for primary application services — <strong className="text-zinc-300">DDIN</strong> (Digital Services API) and <strong className="text-zinc-300">MVEND</strong> (Gwiza Digital Payments API)
+              Aggregated telemetry for primary application services — <strong className="text-zinc-300">DDIN</strong> (Digital Services API), <strong className="text-zinc-300">MVEND</strong> (Gwiza Digital Payments API), and <strong className="text-zinc-300">KORALINK</strong> (Core API)
             </p>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
           {loading && !dash ? (
             <>
+              <Skeleton className="h-[440px]" />
               <Skeleton className="h-[440px]" />
               <Skeleton className="h-[440px]" />
             </>
@@ -466,7 +610,7 @@ export function Overview() {
                 <ApiMetricCard
                   key={svc}
                   chartId={`svc-${svc}`}
-                  name={svc === "DDIN" ? "DDIN Digital Services API" : "MVEND / Gwiza Payments API"}
+                  name={SERVICE_LABELS[svc]}
                   subtitle={`Service Code: ${svc}`}
                   status={s?.status ?? "operational"}
                   errorRate5m={s?.error_rate_5m ?? 0}

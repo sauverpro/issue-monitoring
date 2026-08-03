@@ -4,7 +4,12 @@ import { mapAppServiceToRollup } from "./sentryServiceMap.js";
 /** Raw row from Sentry Discover API or webhook wrapper. */
 export type SentryDiscoverRow = Record<string, unknown>;
 
-const INGEST_TYPES = new Set(["api_success", "api_failure"]);
+const INGEST_TYPES = new Set([
+  "api_success",
+  "api_failure",
+  "payment_success",
+  "payment_failure",
+]);
 const SKIP_TYPES = new Set([
   "external_api_success",
   "external_api_failure",
@@ -80,12 +85,13 @@ function deriveOutcome(
   statusCode: number,
   isOther: boolean
 ): "SUCCESS" | "FAILURE" | "OTHER" {
-  if (!sentryType && !status && (isOther || statusCode === 0)) {
-    return "FAILURE";
-  }
-  if (isOther || statusCode === 0) return "OTHER";
+  // Trust the client's explicit call result first — this must win even when
+  // http_status is missing/unparseable, otherwise a real api_success event
+  // with no http_status tag gets miscategorized as OTHER below.
   const st = status.toLowerCase();
-  if (st === "success" || sentryType === "api_success") return "SUCCESS";
+  if (sentryType === "api_success" || sentryType === "payment_success" || st === "success") return "SUCCESS";
+  if (sentryType === "api_failure" || sentryType === "payment_failure" || st === "failure") return "FAILURE";
+  if (isOther || statusCode === 0) return "OTHER";
   if (statusCode >= 200 && statusCode < 300) return "SUCCESS";
   return "FAILURE";
 }
@@ -96,9 +102,11 @@ function deriveOutcome(
 export function normalizeSentryRow(row: SentryDiscoverRow): PersistEventInput | null {
   const sentryType = tag(row, "type");
   if (SKIP_TYPES.has(sentryType)) return null;
-  if (sentryType && !INGEST_TYPES.has(sentryType)) {
-    if (sentryType.startsWith("external_")) return null;
-  }
+  // Only ingest events explicitly tagged as an API call outcome. Without this,
+  // generic Sentry events (crash reports, breadcrumbs, transactions) that carry
+  // no tags[type]/tags[status]/tags[http_status] at all were falling through
+  // and getting stored as fake FAILURE api_events, skewing the dashboard.
+  if (!INGEST_TYPES.has(sentryType)) return null;
 
   const requestUrlTag = tag(row, "endpoint");
 

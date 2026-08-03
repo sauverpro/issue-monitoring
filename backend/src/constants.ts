@@ -1,4 +1,4 @@
-export const SERVICES = ["DDIN", "MVEND"] as const;
+export const SERVICES = ["DDIN", "MVEND", "KORALINK"] as const;
 export type ServiceName = (typeof SERVICES)[number];
 
 /** Rolling window: degraded if >= this fraction */

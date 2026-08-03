@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
+  Activity,
   Code2,
   Copy,
   Check,
@@ -12,6 +14,8 @@ import {
   Terminal,
   ExternalLink,
   ShieldCheck,
+  LogIn,
+  BookOpen,
 } from "lucide-react";
 import { clsx } from "clsx";
 import { BASE } from "@/lib/api";
@@ -33,7 +37,7 @@ type EndpointDef = {
   sampleParams: Record<string, string>;
 };
 
-const DEFAULT_API_KEY = "g71XbneogmVS_xC5eeXsST9EVmVnnF-X757gHcFrZpk";
+const DEFAULT_API_KEY = "FdmjzPqKJ_mse35S2ZTukAnFwqcX4GMZFV0A3C5V3Y4";
 
 const ENDPOINTS: EndpointDef[] = [
   {
@@ -57,7 +61,7 @@ const ENDPOINTS: EndpointDef[] = [
     category: "Telemetry",
     desc: "Line-item log feed of API calls containing endpoint, status code, latency, outcome, service, user context, and failure reasons for PowerBI Fact tables.",
     params: [
-      { name: "service", type: "string", default: "", desc: "Filter by product line", options: ["ALL", "DDIN", "MVEND"] },
+      { name: "service", type: "string", default: "", desc: "Filter by product line", options: ["ALL", "DDIN", "MVEND", "KORALINK"] },
       { name: "outcome", type: "string", default: "", desc: "Filter by outcome", options: ["ALL", "SUCCESS", "FAILURE", "OTHER"] },
       { name: "limit", type: "number", default: "500", desc: "Number of records (max 5000)" },
       { name: "format", type: "string", default: "json", desc: "Output format", options: ["json", "csv"] },
@@ -230,9 +234,45 @@ in
   };
 
   return (
-    <div className="space-y-8 pb-12">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-950 p-6 shadow-2xl ring-1 ring-white/[0.04]">
+    <div className="min-h-screen bg-zinc-950">
+      {/* Public top bar (no internal dashboard nav is exposed to unauthenticated visitors) */}
+      <header className="sticky top-0 z-10 border-b border-zinc-800/80 bg-zinc-950/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-6 py-3.5 lg:px-8">
+          <Link to="/api-docs" className="flex items-center gap-2 font-semibold text-zinc-100">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-500/30">
+              <Activity className="h-4 w-4 text-emerald-400" />
+            </span>
+            <span className="text-sm tracking-tight">Koralink</span>
+            <span className="hidden text-xs font-normal text-zinc-500 sm:inline">/ API Documentation</span>
+          </Link>
+          <Link
+            to="/login"
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs font-semibold text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+          >
+            <LogIn className="h-3.5 w-3.5" />
+            Staff Login
+          </Link>
+        </div>
+      </header>
+
+      <div className="mx-auto max-w-7xl space-y-8 px-6 py-8 pb-16 lg:px-8">
+        {/* Intro copy for unauthenticated/public visitors */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+            <BookOpen className="h-4 w-4" />
+            Public Reference
+          </div>
+          <p className="max-w-3xl text-sm leading-relaxed text-zinc-400">
+            This page documents Koralink&apos;s read-only PowerBI &amp; Data Analyst reporting endpoints.
+            Every request requires the <code className="rounded bg-zinc-900 px-1 py-0.5 text-emerald-300">X-API-Key</code> header
+            (or an equivalent <code className="rounded bg-zinc-900 px-1 py-0.5 text-emerald-300">Authorization: Bearer</code> token)
+            shown below — no dashboard account is needed to explore or test these endpoints. Dashboard
+            staff can sign in separately via <strong className="text-zinc-300">Staff Login</strong> above.
+          </p>
+        </div>
+
+        {/* Header Banner */}
+        <div className="relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-r from-zinc-900 via-zinc-900/90 to-zinc-950 p-6 shadow-2xl ring-1 ring-white/[0.04]">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
@@ -520,6 +560,7 @@ in
             </ol>
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

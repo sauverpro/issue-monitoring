@@ -12,7 +12,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      "/api": {
+      // Trailing slash matters: "/api" as a prefix would also swallow
+      // frontend routes like "/api-docs" and proxy them to the backend.
+      "/api/": {
         target: "http://localhost:3000",
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),

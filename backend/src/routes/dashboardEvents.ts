@@ -4,7 +4,7 @@ import { z } from "zod";
 import { requireJwt } from "../middleware/jwt.js";
 
 const querySchema = z.object({
-  service: z.enum(["DDIN", "MVEND"]).optional(),
+  service: z.enum(["DDIN", "MVEND", "KORALINK"]).optional(),
   upstream_key: z.string().optional(),
   endpoint: z.string().optional(),
   status_code: z.coerce.number().int().optional(),

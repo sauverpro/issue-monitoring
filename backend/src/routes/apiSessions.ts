@@ -55,7 +55,16 @@ export function apiSessionsRouter(pool: Pool): IRouter {
     res.json(analytics);
   });
 
-  r.get(["/api/sessions/:sessionId/actions", "/session-investigation/:sessionId/actions"], requireJwt, async (req, res) => {
+  r.get(
+    [
+      "/api/sessions/:sessionId/actions",
+      "/session-investigation/:sessionId/actions",
+      // Local Vite dev proxy strips the "/api" prefix before forwarding, so
+      // the frontend's "/api/sessions/:id/actions" call lands here bare.
+      "/sessions/:sessionId/actions",
+    ],
+    requireJwt,
+    async (req, res) => {
     const parsed = sessionIdSchema.safeParse(req.params.sessionId);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid sessionId" });
@@ -76,7 +85,15 @@ export function apiSessionsRouter(pool: Pool): IRouter {
     }
   });
 
-  r.get(["/api/sessions/:sessionId/failures", "/session-investigation/:sessionId/failures"], requireJwt, async (req, res) => {
+  r.get(
+    [
+      "/api/sessions/:sessionId/failures",
+      "/session-investigation/:sessionId/failures",
+      // Same dev-proxy rationale as the /actions route above.
+      "/sessions/:sessionId/failures",
+    ],
+    requireJwt,
+    async (req, res) => {
     const parsed = sessionIdSchema.safeParse(req.params.sessionId);
     if (!parsed.success) {
       res.status(400).json({ error: "Invalid sessionId" });
