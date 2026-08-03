@@ -52,6 +52,10 @@ export const config = {
     ),
     webhookSecret: process.env.SENTRY_WEBHOOK_SECRET?.trim() || "",
     syncIntervalMs: Number(process.env.SENTRY_SYNC_INTERVAL_MS) || 300_000,
-    discoverQuery: process.env.SENTRY_DISCOVER_QUERY?.trim() || "",
+    // Default to only pulling events explicitly tagged by our API instrumentation
+    // (tags[type] = api_success/api_failure). Without this filter, the sync pulls
+    // every Sentry event for the project (crashes, breadcrumbs, transactions),
+    // and untagged rows were previously defaulting to a FAILURE outcome.
+    discoverQuery: process.env.SENTRY_DISCOVER_QUERY?.trim() || "has:tags[type]",
   },
 };

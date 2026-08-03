@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   ListTree,
   LogOut,
+  RefreshCw,
   Route as RouteIcon,
   ScrollText,
   User,
@@ -31,6 +32,7 @@ const mainNav: NavItem[] = [
   { to: "/incidents", label: "Incidents", icon: ListTree },
   { to: "/events", label: "Event log", icon: ScrollText },
   { to: "/endpoints", label: "Endpoints", icon: RouteIcon },
+  { to: "/sentry-sync", label: "Sentry Sync", icon: RefreshCw },
 ];
 
 const monitoringNav: NavItem[] = [

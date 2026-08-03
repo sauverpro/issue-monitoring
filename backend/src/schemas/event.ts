@@ -23,7 +23,7 @@ const upstreamKeySchema = z
 const outcomeSchema = z.enum(["SUCCESS", "FAILURE", "OTHER"]);
 
 const baseIngest = z.object({
-  service: z.enum(["DDIN", "MVEND"]),
+  service: z.enum(["DDIN", "MVEND", "KORALINK"]),
   /** Path or resource id — e.g. `/api/digital-id/verify` */
   endpoint: z.string().min(1).max(MAX_ENDPOINT_LEN),
   /** Full URL called (scheme, host, path, query) — optional */

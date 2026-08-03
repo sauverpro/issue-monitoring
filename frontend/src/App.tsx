@@ -14,6 +14,7 @@ import { SessionAnalyticsPage } from "@/pages/monitoring/SessionAnalytics";
 import { MonitoringIssues } from "@/pages/monitoring/Issues";
 import { MonitoringIssueDetail } from "@/pages/monitoring/IssueDetail";
 import { ApiDocs } from "@/pages/ApiDocs";
+import { SentrySync } from "@/pages/SentrySync";
 
 function Protected({ children }: { children: ReactNode }) {
   const { auth } = useAuth();
@@ -77,6 +78,14 @@ export default function App() {
         }
       />
       <Route
+        path="/sentry-sync"
+        element={
+          <Protected>
+            <SentrySync />
+          </Protected>
+        }
+      />
+      <Route
         path="/monitoring/issues"
         element={
           <Protected>
@@ -116,14 +125,7 @@ export default function App() {
           </Protected>
         }
       />
-      <Route
-        path="/api-docs"
-        element={
-          <Protected>
-            <ApiDocs />
-          </Protected>
-        }
-      />
+      <Route path="/api-docs" element={<ApiDocs />} />
       <Route path="/sessions" element={<Navigate to="/monitoring/sessions" replace />} />
       <Route
         path="/sessions/:id"
