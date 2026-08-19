@@ -1,5 +1,5 @@
 import type { PersistEventInput } from "../types/persistEvent.js";
-import { mapAppServiceToRollup } from "./sentryServiceMap.js";
+import { mapEventToService } from "./sentryServiceMap.js";
 
 /** Raw row from Sentry Discover API or webhook wrapper. */
 export type SentryDiscoverRow = Record<string, unknown>;
@@ -155,7 +155,7 @@ export function normalizeSentryRow(row: SentryDiscoverRow): PersistEventInput | 
   );
 
   return {
-    service: mapAppServiceToRollup(appService),
+    service: mapEventToService(appService, requestUrl),
     endpoint: pathname.slice(0, 2048),
     request_url: requestUrl.slice(0, 4096),
     status_code,

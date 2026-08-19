@@ -119,7 +119,7 @@ export function powerbiRouter(pool: Pool): IRouter {
 
   /**
    * 2. Granular API Events Telemetry Feed (PowerBI Fact Table)
-   * GET /api/powerbi/events?startDate=...&endDate=...&service=DDIN|MVEND|KORALINK&outcome=SUCCESS|FAILURE&limit=1000&format=json|csv
+   * GET /api/powerbi/events?startDate=...&endDate=...&service=DDIN|MVEND|KORALINK|INTEGRA|RESOLVEIT&outcome=SUCCESS|FAILURE&limit=1000&format=json|csv
    */
   r.get(["/api/powerbi/events", "/powerbi/events"], async (req, res) => {
     try {

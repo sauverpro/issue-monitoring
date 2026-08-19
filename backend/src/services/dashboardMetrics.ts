@@ -73,10 +73,11 @@ export type DashboardPayload = {
 function trackedDefinitions(): { id: string; label: string; baseUrl: string }[] {
   const u = config.trackedApiUrls;
   return [
-    { id: "koralink_main", label: "Koralink main API", baseUrl: u.koralink },
-    { id: "gwiza_mvend", label: "Gwiza / MVEND", baseUrl: u.gwiza },
-    { id: "ddin_agency", label: "DDIN digital services", baseUrl: u.ddin },
-    { id: "tickets_resolveit", label: "Tickets (ResolveIt)", baseUrl: u.tickets },
+    { id: "gwiza_mvend", label: "MVEND / Gwiza Payments", baseUrl: u.gwiza },
+    { id: "koralink_main", label: "Koralink Core API", baseUrl: u.koralink },
+    { id: "ddin_agency", label: "DDIN Digital Services", baseUrl: u.ddin },
+    { id: "integra_intelligra", label: "Integra / Intelligra", baseUrl: u.integra },
+    { id: "tickets_resolveit", label: "ResolveIt Ticketing", baseUrl: u.resolveit },
   ];
 }
 

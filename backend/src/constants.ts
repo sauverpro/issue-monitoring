@@ -1,5 +1,13 @@
-export const SERVICES = ["DDIN", "MVEND", "KORALINK"] as const;
+export const SERVICES = ["DDIN", "MVEND", "KORALINK", "INTEGRA", "RESOLVEIT"] as const;
 export type ServiceName = (typeof SERVICES)[number];
+
+export const SERVICE_LABELS: Record<ServiceName, string> = {
+  DDIN: "DDIN Digital Services API",
+  MVEND: "MVEND / Gwiza Payments API",
+  KORALINK: "Koralink Core API",
+  INTEGRA: "Integra / Intelligra API",
+  RESOLVEIT: "ResolveIt Ticketing API",
+};
 
 /** Rolling window: degraded if >= this fraction */
 export const RATE_DEGRADED_MIN = 0.05;

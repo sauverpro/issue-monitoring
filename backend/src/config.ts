@@ -22,17 +22,21 @@ function parseCorsOrigins(): string | string[] {
   return list;
 }
 
-/** Optional overrides for dashboard “tracked external APIs” (defaults match .env reference comments). */
+/** Optional overrides for the five tracked APIs the Koralink app calls. */
 const tracked = {
   koralink:
-    process.env.TRACKED_KORALINK_URL?.trim() || "https://www.koralink.org",
+    process.env.TRACKED_KORALINK_URL?.trim() || "https://www.djyh.rw/api/v1/",
   gwiza:
-    process.env.TRACKED_GWIZA_URL?.trim() || "https://openapi.gwiza.tech",
+    process.env.TRACKED_GWIZA_URL?.trim() || "https://openapi.gwiza.tech/",
   ddin:
-    process.env.TRACKED_DDIN_URL?.trim() ||
-    "https://core-api.ddin.rw/v1/agency",
-  tickets:
-    process.env.TRACKED_TICKETS_URL?.trim() || "https://resolveit.rw",
+    process.env.TRACKED_DDIN_URL?.trim() || "https://core-api.ddin.rw/v1/",
+  integra:
+    process.env.TRACKED_INTEGRA_URL?.trim() ||
+    "https://rw-prod.intelligra.io/intelligrapi/",
+  resolveit:
+    process.env.TRACKED_RESOLVEIT_URL?.trim() ||
+    process.env.TRACKED_TICKETS_URL?.trim() ||
+    "https://resolveit.rw/",
 };
 
 export const config = {

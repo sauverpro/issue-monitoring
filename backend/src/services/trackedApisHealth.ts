@@ -50,22 +50,11 @@ export function trackedApiDefinitions(): Def[] {
 function definitions(): Def[] {
   const u = config.trackedApiUrls;
   return [
-    { id: "koralink_main", label: "Koralink main API", baseUrl: u.koralink },
-    {
-      id: "gwiza_mvend",
-      label: "Gwiza / MVEND (digital svc)",
-      baseUrl: u.gwiza,
-    },
-    {
-      id: "ddin_agency",
-      label: "DDIN (DIGITAL_SERVICES_BASE_URL)",
-      baseUrl: u.ddin,
-    },
-    {
-      id: "tickets_resolveit",
-      label: "Tickets (TICKETS_BASE_URL)",
-      baseUrl: u.tickets,
-    },
+    { id: "gwiza_mvend", label: "MVEND / Gwiza Payments", baseUrl: u.gwiza },
+    { id: "koralink_main", label: "Koralink Core API", baseUrl: u.koralink },
+    { id: "ddin_agency", label: "DDIN Digital Services", baseUrl: u.ddin },
+    { id: "integra_intelligra", label: "Integra / Intelligra", baseUrl: u.integra },
+    { id: "tickets_resolveit", label: "ResolveIt Ticketing", baseUrl: u.resolveit },
   ];
 }
 

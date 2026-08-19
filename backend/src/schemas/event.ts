@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SERVICES } from "../constants.js";
 
 const MAX_ENDPOINT_LEN = 2048;
 const MAX_REQUEST_URL_LEN = 4096;
@@ -23,7 +24,7 @@ const upstreamKeySchema = z
 const outcomeSchema = z.enum(["SUCCESS", "FAILURE", "OTHER"]);
 
 const baseIngest = z.object({
-  service: z.enum(["DDIN", "MVEND", "KORALINK"]),
+  service: z.enum(SERVICES),
   /** Path or resource id — e.g. `/api/digital-id/verify` */
   endpoint: z.string().min(1).max(MAX_ENDPOINT_LEN),
   /** Full URL called (scheme, host, path, query) — optional */

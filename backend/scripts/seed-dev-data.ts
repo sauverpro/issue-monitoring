@@ -70,7 +70,7 @@ async function main() {
   }
 
   type Row = {
-    service: "DDIN" | "MVEND";
+    service: ServiceName;
     upstream_key: string;
     outcome: "SUCCESS" | "FAILURE" | "OTHER";
     endpoint: string;
@@ -84,15 +84,34 @@ async function main() {
     response_body: string | null;
   };
 
+  const API_BASE: Record<ServiceName, { base: string; paths: string[] }> = {
+    MVEND: {
+      base: "https://openapi.gwiza.tech",
+      paths: ["/wallet/topup", "/payments/init", "/mvend/balance"],
+    },
+    KORALINK: {
+      base: "https://www.djyh.rw/api/v1",
+      paths: ["/orders", "/health", "/catalog"],
+    },
+    DDIN: {
+      base: "https://core-api.ddin.rw/v1",
+      paths: ["/agency/verify", "/agency/status", "/agency/documents"],
+    },
+    INTEGRA: {
+      base: "https://rw-prod.intelligra.io/intelligrapi",
+      paths: ["/phones", "/lookup", "/status"],
+    },
+    RESOLVEIT: {
+      base: "https://resolveit.rw",
+      paths: ["/tickets", "/api/tickets", "/health"],
+    },
+  };
+
   const rows: Row[] = [];
-  const mvendBase = "https://openapi.gwiza.tech";
-  const koralink = "https://www.koralink.org/api";
-  const tickets = "https://resolveit.rw/api";
 
   for (let i = 0; i < 280; i++) {
     const t = new Date(now - Math.random() * sevenDaysMs);
-    const mvendHeavy = i % 5 !== 0;
-    const service: "DDIN" | "MVEND" = mvendHeavy ? "MVEND" : "DDIN";
+    const service = SERVICES[i % SERVICES.length]!;
     const source: "mobile" | "web" = i % 2 === 0 ? "mobile" : "web";
     const failRoll = i % 11;
     const status_code =
@@ -112,28 +131,9 @@ async function main() {
           ? "AUTH_FAILED"
           : null;
 
-    let endpoint: string;
-    let request_url: string | null;
-    if (service === "DDIN") {
-      endpoint =
-        i % 4 === 0
-          ? "/v1/agency/verify"
-          : i % 4 === 1
-            ? "/v1/agency/status"
-            : "/v1/agency/documents";
-      request_url = `https://core-api.ddin.rw${endpoint}`;
-    } else {
-      endpoint =
-        i % 3 === 0 ? "/wallet/topup" : i % 3 === 1 ? "/payments/init" : "/mvend/balance";
-      request_url = `${mvendBase}${endpoint}`;
-    }
-
-    if (i % 37 === 0) {
-      request_url = `${koralink}/health`;
-    }
-    if (i % 41 === 0) {
-      request_url = `${tickets}/tickets`;
-    }
+    const api = API_BASE[service];
+    const endpoint = api.paths[i % api.paths.length]!;
+    const request_url = `${api.base}${endpoint}`;
 
     const latency_ms = Math.max(
       5,
@@ -164,14 +164,12 @@ async function main() {
 
   for (let j = 0; j < 35; j++) {
     const t = new Date(now - j * 5000);
-    const service: "DDIN" | "MVEND" = j % 2 === 0 ? "MVEND" : "DDIN";
+    const service = SERVICES[j % SERVICES.length]!;
     const bad = j < 12;
     const status_code = bad ? 500 : 200;
-    const endpoint = service === "MVEND" ? "/wallet/topup" : "/v1/agency/verify";
-    const request_url =
-      service === "MVEND"
-        ? `${mvendBase}${endpoint}`
-        : "https://core-api.ddin.rw/v1/agency/verify";
+    const api = API_BASE[service];
+    const endpoint = api.paths[0]!;
+    const request_url = `${api.base}${endpoint}`;
     rows.push({
       service,
       upstream_key: upstreamKeyFromEndpoint(endpoint),
@@ -269,10 +267,10 @@ async function main() {
      VALUES
       ($1,'MVEND','P2','open', now() - interval '25 minutes', NULL,
        'MVEND wallet top-up failures spiking (seed)', 0.28, NULL, false),
-      ($2,'DDIN','P3','investigating', now() - interval '3 hours', NULL,
-       'DDIN agency verify intermittent 401s (seed)', 0.12, NULL, false),
-      ($3,'DDIN','P4','resolved', now() - interval '5 days', now() - interval '4 days',
-       'DDIN scheduled maintenance window (seed)', 0.08, 'Cleared after vendor deploy', false)`,
+      ($2,'INTEGRA','P3','investigating', now() - interval '3 hours', NULL,
+       'Integra phone lookup intermittent 401s (seed)', 0.12, NULL, false),
+      ($3,'RESOLVEIT','P4','resolved', now() - interval '5 days', now() - interval '4 days',
+       'ResolveIt scheduled maintenance window (seed)', 0.08, 'Cleared after vendor deploy', false)`,
     [incOpen, incInvest, incResolved]
   );
 

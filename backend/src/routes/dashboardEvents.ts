@@ -2,9 +2,10 @@ import { Router, type IRouter } from "express";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { requireJwt } from "../middleware/jwt.js";
+import { SERVICES } from "../constants.js";
 
 const querySchema = z.object({
-  service: z.enum(["DDIN", "MVEND", "KORALINK"]).optional(),
+  service: z.enum(SERVICES).optional(),
   upstream_key: z.string().optional(),
   endpoint: z.string().optional(),
   status_code: z.coerce.number().int().optional(),

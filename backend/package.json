@@ -10,7 +10,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:dev": "tsx scripts/seed-dev-data.ts",
-    "test": "node --import tsx --test tests/sessionSummary.test.ts tests/slidingWindow.test.ts tests/incidents.test.ts tests/uptime.test.ts tests/syntheticPing.test.ts"
+    "test": "node --import tsx --test tests/sessionSummary.test.ts tests/slidingWindow.test.ts tests/incidents.test.ts tests/uptime.test.ts tests/syntheticPing.test.ts tests/sentryServiceMap.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
