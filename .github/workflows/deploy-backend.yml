@@ -58,7 +58,6 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: npm test
-        continue-on-error: true  # Remove this line once tests are stable
 
   # ── Job 2: Deploy to VPS via SSH ─────────────────────────────────────────────
   deploy:
@@ -98,7 +97,7 @@ jobs:
             echo ""
             echo "📦 Installing dependencies..."
             cd backend
-            npm ci --production=false
+            npm ci --production=false 
 
             # ── Run database migrations ───────────────────────────
             echo ""

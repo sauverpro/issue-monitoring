@@ -37,6 +37,9 @@ export type DashboardApiRow = {
   unique_users: number;
   last_seen: string | null;
   sparkline: { bucket: string; count: number }[];
+  reachable: boolean | null;
+  ping_latency_ms: number | null;
+  ping_checked_at: string | null;
 };
 
 export type DashboardPayload = {
@@ -238,6 +241,9 @@ export async function getDashboardMetrics(
       unique_users: 0,
       last_seen: null,
       sparkline: [],
+      reachable: null,
+      ping_latency_ms: null,
+      ping_checked_at: null,
     });
   }
 
@@ -273,6 +279,9 @@ export async function getDashboardMetrics(
       unique_users: Number(row.users),
       last_seen: row.last_seen ? row.last_seen.toISOString() : null,
       sparkline: spark,
+      reachable: null,
+      ping_latency_ms: null,
+      ping_checked_at: null,
     });
   }
 
@@ -337,8 +346,32 @@ export async function getDashboardMetrics(
           unique_users: Number(m.users),
           last_seen: m.last_seen ? m.last_seen.toISOString() : null,
           sparkline: spark,
+          reachable: null,
+          ping_latency_ms: null,
+          ping_checked_at: null,
         });
       }
+    }
+  }
+
+  const pingR = await pool.query<{
+    api_id: string;
+    ok: boolean;
+    latency_ms: number | null;
+    checked_at: Date;
+  }>(
+    `SELECT DISTINCT ON (api_id) api_id, ok, latency_ms, checked_at
+     FROM synthetic_checks
+     WHERE api_id = ANY($1)
+     ORDER BY api_id, checked_at DESC`,
+    [trackedDefinitions().map((d) => d.id)]
+  );
+  for (const p of pingR.rows) {
+    const row = apiMap.get(p.api_id);
+    if (row) {
+      row.reachable = p.ok;
+      row.ping_latency_ms = p.latency_ms;
+      row.ping_checked_at = p.checked_at.toISOString();
     }
   }
 

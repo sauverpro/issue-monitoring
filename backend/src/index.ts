@@ -19,6 +19,11 @@ import { issuesRouter } from "./routes/issues.js";
 import { powerbiRouter } from "./routes/powerbi.js";
 import { sentrySyncRouter } from "./routes/sentrySyncStatus.js";
 import { startSentrySyncScheduler } from "./services/sentrySync.js";
+import { usersRouter } from "./routes/users.js";
+import { uptimeRouter } from "./routes/uptime.js";
+import { statusRouter } from "./routes/status.js";
+import { startRetentionScheduler } from "./services/retention.js";
+import { startSyntheticPingScheduler } from "./services/syntheticPing.js";
 
 const app = express();
 
@@ -54,9 +59,14 @@ app.use(apiSessionsRouter(pool));
 app.use(issuesRouter(pool));
 app.use(powerbiRouter(pool));
 app.use(sentrySyncRouter(pool));
+app.use(usersRouter(pool));
+app.use(uptimeRouter(pool));
+app.use(statusRouter(pool));
 
 startRecoveryScheduler(pool);
 startSentrySyncScheduler(pool);
+startRetentionScheduler(pool);
+startSyntheticPingScheduler(pool);
 
 app.use(
   (

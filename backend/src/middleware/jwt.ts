@@ -2,10 +2,15 @@ import type { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 
-export type JwtPayload = { sub: string; email: string };
+export type DashboardRole = "admin" | "viewer";
+export type JwtPayload = { sub: string; email: string; role: DashboardRole };
 
-export function signJwt(userId: string, email: string): string {
-  return jwt.sign({ sub: userId, email }, config.jwtSecret, {
+export function signJwt(
+  userId: string,
+  email: string,
+  role: DashboardRole
+): string {
+  return jwt.sign({ sub: userId, email, role }, config.jwtSecret, {
     expiresIn: "8h",
   });
 }

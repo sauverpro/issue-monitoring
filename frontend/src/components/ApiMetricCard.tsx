@@ -6,8 +6,9 @@ import {
   XAxis,
 } from "recharts";
 import { StatusBadge, type ServiceStatus } from "./StatusBadge";
-import { Activity, Clock, ShieldAlert, CheckCircle2, XCircle, Users } from "lucide-react";
+import { Activity, Clock, ShieldAlert, CheckCircle2, XCircle, Users, Satellite } from "lucide-react";
 import { clsx } from "clsx";
+import { useTheme } from "@/lib/theme";
 
 export type ApiMetrics = {
   p50: number;
@@ -43,6 +44,20 @@ function chartStroke(status: ServiceStatus): string {
   return "#10b981"; // emerald-500
 }
 
+function tooltipStyle(theme: "light" | "dark") {
+  return theme === "light"
+    ? {
+        background: "#ffffff",
+        border: "1px solid #e4e4e7",
+        color: "#18181b",
+      }
+    : {
+        background: "#09090b",
+        border: "1px solid #27272a",
+        color: "#f4f4f5",
+      };
+}
+
 export function ApiMetricCard({
   name,
   subtitle,
@@ -53,6 +68,7 @@ export function ApiMetricCard({
   metrics,
   volume,
   chartId,
+  ping,
 }: {
   name: string;
   subtitle?: string | null;
@@ -63,7 +79,9 @@ export function ApiMetricCard({
   metrics: ApiMetrics;
   volume: { bucket: string; count: number }[];
   chartId: string;
+  ping?: { reachable: boolean | null; latencyMs: number | null };
 }) {
+  const { theme } = useTheme();
   const chartData = volume.map((v) => ({
     t: formatChartTick(v.bucket, windowLabel),
     count: v.count,
@@ -81,27 +99,40 @@ export function ApiMetricCard({
   const otherPct = metrics.total_requests > 0 ? (otherCount / totalReqs) * 100 : 0;
 
   return (
-    <section className="group relative overflow-hidden rounded-2xl border border-zinc-800/80 bg-gradient-to-b from-zinc-900/80 via-zinc-900/40 to-zinc-950/90 p-5 shadow-xl transition hover:border-zinc-700/80 ring-1 ring-white/[0.03]">
+    <section className="group relative overflow-hidden rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-gradient-to-b from-zinc-50/80 dark:from-zinc-900/80 via-zinc-50/40 dark:via-zinc-900/40 to-white/90 dark:to-zinc-950/90 p-5 shadow-xl transition hover:border-zinc-300/80 dark:hover:border-zinc-700/80 ring-1 ring-zinc-950/5 dark:ring-white/[0.03]">
       {/* Top row */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="truncate text-lg font-bold tracking-tight text-white group-hover:text-emerald-300 transition-colors">
+            <h2 className="truncate text-lg font-bold tracking-tight text-zinc-900 dark:text-white group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
               {name}
             </h2>
           </div>
           {subtitle && (
-            <p className="mt-0.5 truncate text-xs font-mono text-zinc-400" title={subtitle}>
+            <p className="mt-0.5 truncate text-xs font-mono text-zinc-700 dark:text-zinc-400" title={subtitle}>
               {subtitle}
             </p>
           )}
-          <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-400">
-            <Clock className="h-3 w-3 text-zinc-400" />
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-400">
+            <Clock className="h-3 w-3 text-zinc-700 dark:text-zinc-400" />
             Last active:{" "}
-            <span className="font-medium text-zinc-300">
+            <span className="font-medium text-zinc-600 dark:text-zinc-300">
               {lastSeen ? new Date(lastSeen).toLocaleString() : "No traffic recorded"}
             </span>
           </p>
+          {ping && ping.reachable !== null && (
+            <p
+              className={clsx(
+                "mt-1 flex items-center gap-1.5 text-xs",
+                ping.reachable ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+              )}
+            >
+              <Satellite className="h-3 w-3" />
+              {ping.reachable
+                ? `Reachable (ping ${ping.latencyMs ?? "?"}ms)`
+                : "Unreachable — synthetic check failing"}
+            </p>
+          )}
         </div>
         <StatusBadge status={status} />
       </div>
@@ -133,17 +164,17 @@ export function ApiMetricCard({
       </dl>
 
       {/* Outcome Proportion Ratio Bar */}
-      <div className="mt-4 rounded-xl border border-zinc-800/60 bg-zinc-950/60 p-3">
-        <div className="flex items-center justify-between text-xs font-medium text-zinc-400 mb-2">
+      <div className="mt-4 rounded-xl border border-zinc-200/60 dark:border-zinc-800/60 bg-white/60 dark:bg-zinc-950/60 p-3">
+        <div className="flex items-center justify-between text-xs font-medium text-zinc-700 dark:text-zinc-400 mb-2">
           <span className="flex items-center gap-1.5">
-            <Activity className="h-3.5 w-3.5 text-emerald-400" />
+            <Activity className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             Outcome Distribution ({windowLabel})
           </span>
-          <span className="text-zinc-300 font-semibold">{successPct.toFixed(1)}% Success Rate</span>
+          <span className="text-zinc-600 dark:text-zinc-300 font-semibold">{successPct.toFixed(1)}% Success Rate</span>
         </div>
         
         {/* Multi-segment progress bar */}
-        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-zinc-900 ring-1 ring-zinc-800">
+        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-zinc-50 dark:bg-zinc-900 ring-1 ring-zinc-200 dark:ring-zinc-800">
           <div
             style={{ width: `${Math.max(0, successPct)}%` }}
             className="bg-emerald-500 transition-all duration-500"
@@ -164,7 +195,7 @@ export function ApiMetricCard({
         {/* Legend pills */}
         <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2 text-[11px]">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1 text-emerald-400">
+            <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
               <CheckCircle2 className="h-3 w-3" />
               <strong className="font-semibold">{successCount.toLocaleString()}</strong> success
             </span>
@@ -173,15 +204,15 @@ export function ApiMetricCard({
               <strong className="font-semibold">{failureCount.toLocaleString()}</strong> failures
             </span>
             {otherCount > 0 && (
-              <span className="inline-flex items-center gap-1 text-amber-300">
+              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
                 <ShieldAlert className="h-3 w-3" />
                 <strong className="font-semibold">{otherCount.toLocaleString()}</strong> non-HTTP
               </span>
             )}
           </div>
           {(metrics.unique_users ?? 0) > 0 && (
-            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-800/80 px-2 py-0.5 text-zinc-300 font-medium">
-              <Users className="h-3 w-3 text-cyan-400" />
+            <span className="inline-flex items-center gap-1 rounded-full bg-zinc-200/80 dark:bg-zinc-800/80 px-2 py-0.5 text-zinc-600 dark:text-zinc-300 font-medium">
+              <Users className="h-3 w-3 text-cyan-600 dark:text-cyan-400" />
               {metrics.unique_users} active user{metrics.unique_users === 1 ? "" : "s"}
             </span>
           )}
@@ -191,16 +222,16 @@ export function ApiMetricCard({
       {/* Traffic Area Chart */}
       <div className="mt-4">
         <div className="mb-2 flex items-center justify-between">
-          <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+          <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-400 uppercase tracking-wider">
             Volume trend ({windowLabel})
           </span>
-          <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+          <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
             {metrics.total_requests.toLocaleString()} Total Calls
           </span>
         </div>
         <div className="relative h-32 min-h-[8rem] w-full min-w-0">
           {chartData.length === 0 ? (
-            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/40 text-xs text-zinc-500">
+            <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-zinc-200 dark:border-zinc-800 bg-white/40 dark:bg-zinc-950/40 text-xs text-zinc-600 dark:text-zinc-500">
               No telemetry traffic recorded for this window
             </div>
           ) : (
@@ -221,12 +252,10 @@ export function ApiMetricCard({
                 />
                 <Tooltip
                   contentStyle={{
-                    background: "#09090b",
-                    border: "1px solid #27272a",
+                    ...tooltipStyle(theme),
                     borderRadius: "10px",
                     fontSize: "12px",
                     boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.5)",
-                    color: "#f4f4f5",
                   }}
                   formatter={(val: number) => [`${val.toLocaleString()} requests`, "Volume"]}
                 />
@@ -261,8 +290,8 @@ function MetricCell({
   highlight?: "success" | "warning" | "danger";
 }) {
   return (
-    <div className="rounded-xl bg-zinc-950/80 p-3 ring-1 ring-zinc-800/80 flex flex-col justify-between">
-      <dt className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+    <div className="rounded-xl bg-white/80 dark:bg-zinc-950/80 p-3 ring-1 ring-zinc-200/80 dark:ring-zinc-800/80 flex flex-col justify-between">
+      <dt className="text-[10px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-500">
         {label}
       </dt>
       <dd
@@ -271,15 +300,15 @@ function MetricCell({
           highlight === "danger"
             ? "text-rose-400"
             : highlight === "warning"
-              ? "text-amber-300"
+              ? "text-amber-700 dark:text-amber-300"
               : highlight === "success"
-                ? "text-emerald-400"
-                : "text-white"
+                ? "text-emerald-600 dark:text-emerald-400"
+                : "text-zinc-900 dark:text-white"
         )}
       >
         {value}
       </dd>
-      {subText && <p className="mt-0.5 text-[10px] text-zinc-500 font-medium truncate">{subText}</p>}
+      {subText && <p className="mt-0.5 text-[10px] text-zinc-600 dark:text-zinc-500 font-medium truncate">{subText}</p>}
     </div>
   );
 }

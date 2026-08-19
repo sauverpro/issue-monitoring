@@ -42,6 +42,9 @@ export const config = {
   jwtSecret: requireEnv("JWT_SECRET"),
   corsOrigin: parseCorsOrigins(),
   trackedApiUrls: tracked,
+  retentionDays: Number(process.env.RETENTION_DAYS) || 30,
+  slackWebhookUrl: process.env.SLACK_WEBHOOK_URL?.trim() || "",
+  dashboardUrl: (process.env.DASHBOARD_URL?.trim() || "").replace(/\/$/, ""),
   sentry: {
     authToken: process.env.SENTRY_AUTH_TOKEN?.trim() || "",
     org: process.env.SENTRY_ORG?.trim() || "ict-chamber",

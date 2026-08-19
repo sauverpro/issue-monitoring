@@ -18,15 +18,15 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 
   return (
 
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2">
+    <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 px-3 py-2">
 
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
 
         {label}
 
       </p>
 
-      <p className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-100">
+      <p className="mt-0.5 text-lg font-semibold tabular-nums text-zinc-800 dark:text-zinc-100">
 
         {value}
 
@@ -102,7 +102,7 @@ export function MonitoringIssueDetail() {
 
 
 
-  if (loading) return <p className="text-zinc-500">Loading issue…</p>;
+  if (loading) return <p className="text-zinc-600 dark:text-zinc-500">Loading issue…</p>;
 
 
 
@@ -116,7 +116,7 @@ export function MonitoringIssueDetail() {
 
           to="/monitoring/issues"
 
-          className="inline-flex items-center gap-1 text-sm text-emerald-400"
+          className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400"
 
         >
 
@@ -126,7 +126,7 @@ export function MonitoringIssueDetail() {
 
         </Link>
 
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200">
 
           {err?.includes("404") || err?.toLowerCase().includes("not found")
 
@@ -158,7 +158,7 @@ export function MonitoringIssueDetail() {
 
         to="/monitoring/issues"
 
-        className="inline-flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300"
+        className="inline-flex items-center gap-1 text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
 
       >
 
@@ -174,9 +174,9 @@ export function MonitoringIssueDetail() {
 
         <div>
 
-          <h1 className="text-xl font-semibold text-white">{issue.title}</h1>
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">{issue.title}</h1>
 
-          <p className="mt-2 text-sm text-zinc-400">
+          <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-400">
 
             {issue.level} · {issue.status} · {issue.count} events ·{" "}
 
@@ -184,7 +184,7 @@ export function MonitoringIssueDetail() {
 
           </p>
 
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-500">
 
             First seen {new Date(issue.firstSeen).toISOString()} · Last seen{" "}
 
@@ -202,7 +202,7 @@ export function MonitoringIssueDetail() {
 
           rel="noopener noreferrer"
 
-          className="inline-flex items-center gap-1 rounded-md border border-zinc-800 px-3 py-1.5 text-sm text-zinc-300 hover:bg-zinc-900"
+          className="inline-flex items-center gap-1 rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-900"
 
         >
 
@@ -226,13 +226,13 @@ export function MonitoringIssueDetail() {
 
               <div>
 
-                <h2 className="text-sm font-medium text-emerald-300">
+                <h2 className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
 
                   Affected session
 
                 </h2>
 
-                <p className="mt-1 font-mono text-sm text-zinc-200">
+                <p className="mt-1 font-mono text-sm text-zinc-700 dark:text-zinc-200">
 
                   {issue.relatedSessionId}
 
@@ -240,7 +240,7 @@ export function MonitoringIssueDetail() {
 
                 {session.user.email && (
 
-                  <p className="mt-1 text-xs text-zinc-400">
+                  <p className="mt-1 text-xs text-zinc-700 dark:text-zinc-400">
 
                     {session.user.email}
 
@@ -256,7 +256,7 @@ export function MonitoringIssueDetail() {
 
                 to={`/monitoring/sessions/${encodeURIComponent(issue.relatedSessionId)}`}
 
-                className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/20"
+                className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20"
 
               >
 
@@ -306,13 +306,13 @@ export function MonitoringIssueDetail() {
 
           <section>
 
-            <h2 className="mb-3 text-sm font-medium text-zinc-400">
+            <h2 className="mb-3 text-sm font-medium text-zinc-700 dark:text-zinc-400">
 
               User action timeline (before / around this error)
 
             </h2>
 
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
+            <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-900/30 p-4">
 
               <ActionTimeline actions={session.actions} />
 
@@ -326,9 +326,9 @@ export function MonitoringIssueDetail() {
 
         <section className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
 
-          <h2 className="text-sm font-medium text-emerald-300">Affected session</h2>
+          <h2 className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Affected session</h2>
 
-          <p className="mt-1 font-mono text-sm text-zinc-200">
+          <p className="mt-1 font-mono text-sm text-zinc-700 dark:text-zinc-200">
 
             {issue.relatedSessionId}
 
@@ -338,7 +338,7 @@ export function MonitoringIssueDetail() {
 
             to={`/monitoring/sessions/${encodeURIComponent(issue.relatedSessionId)}`}
 
-            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-emerald-400 hover:text-emerald-300"
+            className="mt-3 inline-flex items-center gap-1 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
 
           >
 
@@ -350,13 +350,13 @@ export function MonitoringIssueDetail() {
 
       ) : (
 
-        <p className="rounded-lg border border-dashed border-zinc-800 px-4 py-6 text-center text-sm text-zinc-500">
+        <p className="rounded-lg border border-dashed border-zinc-200 dark:border-zinc-800 px-4 py-6 text-center text-sm text-zinc-600 dark:text-zinc-500">
 
           No matching session found near this error. Telemetry{" "}
 
-          <code className="text-zinc-400">captureMessage</code> events with{" "}
+          <code className="text-zinc-700 dark:text-zinc-400">captureMessage</code> events with{" "}
 
-          <code className="text-zinc-400">session_id</code> may not overlap this
+          <code className="text-zinc-700 dark:text-zinc-400">session_id</code> may not overlap this
 
           issue&apos;s timestamp — check Sessions or Event log for the same time
 

@@ -39,35 +39,35 @@ export function MonitoringIssues() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-white">Issues</h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-white">Issues</h1>
+        <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-400">
           Unresolved Sentry issues with session correlation when available.
         </p>
       </div>
 
       {err && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200">
           {err}
         </div>
       )}
 
-      <ul className="divide-y divide-zinc-800 overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <ul className="divide-y divide-zinc-200 dark:divide-zinc-800 overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-900/30">
         {loading ? (
-          <li className="px-4 py-8 text-center text-zinc-500">Loading…</li>
+          <li className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-500">Loading…</li>
         ) : issues.length === 0 ? (
-          <li className="px-4 py-8 text-center text-zinc-500">No issues found.</li>
+          <li className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-500">No issues found.</li>
         ) : (
           issues.map((issue) => (
             <li key={issue.id}>
-              <div className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-zinc-900/50">
+              <div className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
                 <div className="min-w-0 flex-1">
                   <Link
                     to={`/monitoring/issues/${issue.id}`}
-                    className="text-sm font-medium text-zinc-100 hover:text-emerald-300"
+                    className="text-sm font-medium text-zinc-800 dark:text-zinc-100 hover:text-emerald-700 dark:hover:text-emerald-300"
                   >
                     {issue.title}
                   </Link>
-                  <p className="mt-1 text-xs text-zinc-500">
+                  <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-500">
                     {issue.level} · {issue.count} events · {issue.userCount} users ·
                     last seen {new Date(issue.lastSeen).toISOString()}
                   </p>
@@ -77,14 +77,14 @@ export function MonitoringIssues() {
                     href={issue.permalink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-zinc-500 hover:text-zinc-300"
+                    className="text-zinc-600 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300"
                     title="Open in Sentry"
                   >
                     <ExternalLink className="h-4 w-4" />
                   </a>
                   <Link
                     to={`/monitoring/issues/${issue.id}`}
-                    className="inline-flex items-center gap-1 text-xs text-emerald-400"
+                    className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"
                   >
                     View
                     <ArrowRight className="h-3.5 w-3.5" />
@@ -96,12 +96,12 @@ export function MonitoringIssues() {
         )}
       </ul>
 
-      <div className="flex justify-between text-sm text-zinc-500">
+      <div className="flex justify-between text-sm text-zinc-600 dark:text-zinc-500">
         <button
           type="button"
           disabled={page === 1}
           onClick={() => setPage((p) => Math.max(1, p - 1))}
-          className="rounded-md border border-zinc-800 px-3 py-1.5 hover:bg-zinc-900 disabled:opacity-40"
+          className="rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900 disabled:opacity-40"
         >
           Previous
         </button>
@@ -110,7 +110,7 @@ export function MonitoringIssues() {
           type="button"
           disabled={!hasMore}
           onClick={() => setPage((p) => p + 1)}
-          className="rounded-md border border-zinc-800 px-3 py-1.5 hover:bg-zinc-900 disabled:opacity-40"
+          className="rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900 disabled:opacity-40"
         >
           Next
         </button>

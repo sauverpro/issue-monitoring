@@ -14,6 +14,7 @@ import {
 import { broadcastSse } from "../sse/hub.js";
 import type { ServiceName } from "../constants.js";
 import type { DbQueryable } from "./slidingWindow.js";
+import { incidentLink, notifySlack } from "./notifications/slack.js";
 
 async function upsertUserSession(
   client: DbQueryable,
@@ -224,6 +225,9 @@ export async function persistAndProcessEvent(
         severity: incidentBroadcast.severity,
         title: incidentBroadcast.title,
       });
+      void notifySlack(
+        `:rotating_light: *${incidentBroadcast.severity}* — ${incidentBroadcast.title}\n${incidentLink(incidentBroadcast.id)}`
+      );
     } else {
       broadcastSse("incident_updated", {
         id: incidentBroadcast.id,
@@ -231,6 +235,9 @@ export async function persistAndProcessEvent(
         severity: incidentBroadcast.severity,
         title: incidentBroadcast.title,
       });
+      void notifySlack(
+        `:arrow_up: *${incidentBroadcast.severity}* (escalated) — ${incidentBroadcast.title}\n${incidentLink(incidentBroadcast.id)}`
+      );
     }
   }
 

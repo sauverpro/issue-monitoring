@@ -20,9 +20,9 @@ async function main() {
   try {
     const hash = await bcrypt.hash(password, 12);
     await client.query(
-      `INSERT INTO dashboard_users (id, email, password_hash)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash`,
+      `INSERT INTO dashboard_users (id, email, password_hash, role)
+       VALUES ($1, $2, $3, 'admin')
+       ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, role = 'admin'`,
       [randomUUID(), email, hash]
     );
     console.log("Admin user upserted:", email);

@@ -126,11 +126,11 @@ export function SentrySync() {
     <div className="space-y-6 pb-12">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-white">
-            <RefreshCw className="h-5 w-5 text-emerald-400" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-zinc-900 dark:text-white">
+            <RefreshCw className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             Sentry Sync — Real-Time Tracking
           </h1>
-          <p className="text-sm text-zinc-400">
+          <p className="text-sm text-zinc-700 dark:text-zinc-400">
             See Sentry events that haven&apos;t been pulled into the monitor yet, and trigger an
             immediate sync instead of waiting for the next scheduled run.
           </p>
@@ -141,8 +141,8 @@ export function SentrySync() {
           className={clsx(
             "flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-semibold transition",
             syncing
-              ? "cursor-wait border-zinc-700 bg-zinc-800 text-zinc-400"
-              : "border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25"
+              ? "cursor-wait border-zinc-300 dark:border-zinc-700 bg-zinc-200 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-400"
+              : "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/25"
           )}
         >
           <RefreshCw className={clsx("h-4 w-4", syncing && "animate-spin")} />
@@ -151,13 +151,13 @@ export function SentrySync() {
       </div>
 
       {lastAction && (
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/60 px-4 py-2 text-sm text-zinc-300">
+        <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/60 dark:bg-zinc-900/60 px-4 py-2 text-sm text-zinc-600 dark:text-zinc-300">
           {lastAction}
         </div>
       )}
 
       {err && (
-        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+        <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-700 dark:text-red-300">
           {err}
         </div>
       )}
@@ -174,7 +174,7 @@ export function SentrySync() {
           <div
             className={clsx(
               "flex items-center gap-2 text-sm font-bold",
-              status.ingestionHealth.quotaExceeded ? "text-red-300" : "text-amber-200"
+              status.ingestionHealth.quotaExceeded ? "text-red-700 dark:text-red-300" : "text-amber-700 dark:text-amber-200"
             )}
           >
             <AlertTriangle className="h-4 w-4" />
@@ -182,7 +182,7 @@ export function SentrySync() {
               ? "Sentry is dropping events — plan quota likely exceeded"
               : "Sentry dropped some events recently"}
           </div>
-          <p className="mt-1 text-xs text-zinc-300">
+          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
             {status.ingestionHealth.droppedTotal.toLocaleString()} of{" "}
             {(status.ingestionHealth.acceptedTotal + status.ingestionHealth.droppedTotal).toLocaleString()}{" "}
             error-category events (
@@ -197,11 +197,11 @@ export function SentrySync() {
               .map(([reason, count]) => (
                 <span
                   key={reason}
-                  className="rounded-md border border-zinc-700 bg-zinc-900/60 px-2 py-1 text-[11px] text-zinc-300"
+                  className="rounded-md border border-zinc-300 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-900/60 px-2 py-1 text-[11px] text-zinc-600 dark:text-zinc-300"
                   title={reason}
                 >
                   {reasonLabel(reason)}:{" "}
-                  <span className="font-semibold text-white">{count.toLocaleString()}</span>
+                  <span className="font-semibold text-zinc-900 dark:text-white">{count.toLocaleString()}</span>
                 </span>
               ))}
           </div>
@@ -216,80 +216,80 @@ export function SentrySync() {
           <Skeleton className="h-28" />
         </div>
       ) : status && !status.enabled ? (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-200">
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-700 dark:text-amber-200">
           Sentry sync is disabled — <code>SENTRY_AUTH_TOKEN</code> is not configured on the backend.
         </div>
       ) : (
         status && (
           <>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4">
-                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-900/60 p-4">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400">
                   <Clock className="h-3.5 w-3.5" /> Last Pulled
                 </div>
-                <div className="mt-1.5 text-xl font-bold text-white">
+                <div className="mt-1.5 text-xl font-bold text-zinc-900 dark:text-white">
                   {timeAgo(status.lastSyncedAt)}
                 </div>
-                <div className="mt-0.5 text-[11px] text-zinc-500">
+                <div className="mt-0.5 text-[11px] text-zinc-600 dark:text-zinc-500">
                   {status.lastSyncedAt ? new Date(status.lastSyncedAt).toLocaleString() : "—"}
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4">
-                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-900/60 p-4">
+                <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400">
                   <Zap className="h-3.5 w-3.5" /> Next Auto Sync
                 </div>
-                <div className="mt-1.5 text-xl font-bold text-white">
+                <div className="mt-1.5 text-xl font-bold text-zinc-900 dark:text-white">
                   {timeUntil(status.nextSyncAt)}
                 </div>
-                <div className="mt-0.5 text-[11px] text-zinc-500">
+                <div className="mt-0.5 text-[11px] text-zinc-600 dark:text-zinc-500">
                   Every {Math.round(status.syncIntervalMs / 1000)}s
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-900/60 p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400">
                   Un-pulled Events
                 </div>
-                <div className="mt-1.5 text-3xl font-extrabold tracking-tight text-white">
+                <div className="mt-1.5 text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white">
                   {status.pendingCount}
                 </div>
-                <div className="mt-0.5 text-[11px] text-zinc-500">
+                <div className="mt-0.5 text-[11px] text-zinc-600 dark:text-zinc-500">
                   Waiting in Sentry, not yet in the dashboard
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+              <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-900/60 p-4">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400">
                   Pending Breakdown
                 </div>
                 <div className="mt-2 flex items-center gap-3 text-xs">
-                  <span className="flex items-center gap-1 text-emerald-300">
+                  <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
                     <CheckCircle2 className="h-3.5 w-3.5" /> {status.pendingBreakdown.SUCCESS}
                   </span>
-                  <span className="flex items-center gap-1 text-red-300">
+                  <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
                     <XCircle className="h-3.5 w-3.5" /> {status.pendingBreakdown.FAILURE}
                   </span>
-                  <span className="flex items-center gap-1 text-amber-200">
+                  <span className="flex items-center gap-1 text-amber-700 dark:text-amber-200">
                     <AlertTriangle className="h-3.5 w-3.5" /> {status.pendingBreakdown.OTHER}
                   </span>
                 </div>
               </div>
             </div>
 
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 px-5 py-3">
-                <h2 className="text-sm font-bold text-white">
+            <div className="rounded-2xl border border-zinc-200/80 dark:border-zinc-800/80 bg-zinc-50/40 dark:bg-zinc-900/40">
+              <div className="flex items-center justify-between border-b border-zinc-200/80 dark:border-zinc-800/80 px-5 py-3">
+                <h2 className="text-sm font-bold text-zinc-900 dark:text-white">
                   Preview — un-pulled Sentry events{" "}
-                  <span className="font-normal text-zinc-500">
+                  <span className="font-normal text-zinc-600 dark:text-zinc-500">
                     (showing up to {status.pending.length} of {status.pendingCount})
                   </span>
                 </h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="text-zinc-500">
-                    <tr className="border-b border-zinc-800/80">
+                  <thead className="text-zinc-600 dark:text-zinc-500">
+                    <tr className="border-b border-zinc-200/80 dark:border-zinc-800/80">
                       <th className="px-5 py-2 font-semibold">Occurred</th>
                       <th className="px-3 py-2 font-semibold">Service</th>
                       <th className="px-3 py-2 font-semibold">Endpoint</th>
@@ -301,7 +301,7 @@ export function SentrySync() {
                   <tbody>
                     {status.pending.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-5 py-8 text-center text-zinc-500">
+                        <td colSpan={6} className="px-5 py-8 text-center text-zinc-600 dark:text-zinc-500">
                           Nothing pending — the dashboard is fully up to date with Sentry.
                         </td>
                       </tr>
@@ -309,13 +309,13 @@ export function SentrySync() {
                       status.pending.map((p, i) => (
                         <tr
                           key={p.sentryEventId ?? i}
-                          className="border-b border-zinc-900 text-zinc-300 hover:bg-zinc-900/60"
+                          className="border-b border-zinc-900 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/60"
                         >
-                          <td className="whitespace-nowrap px-5 py-2 text-zinc-400">
+                          <td className="whitespace-nowrap px-5 py-2 text-zinc-700 dark:text-zinc-400">
                             {new Date(p.occurredAt).toLocaleString()}
                           </td>
                           <td className="px-3 py-2">
-                            <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-300">
+                            <span className="rounded bg-zinc-200 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
                               {p.service}
                             </span>
                           </td>
@@ -325,10 +325,10 @@ export function SentrySync() {
                           <td className="px-3 py-2">
                             <OutcomeBadge outcome={p.outcome} />
                           </td>
-                          <td className="px-3 py-2 font-mono text-[11px] text-zinc-500">
+                          <td className="px-3 py-2 font-mono text-[11px] text-zinc-600 dark:text-zinc-500">
                             {p.sessionId ?? "—"}
                           </td>
-                          <td className="px-3 py-2 text-zinc-400">{p.userEmail ?? "—"}</td>
+                          <td className="px-3 py-2 text-zinc-700 dark:text-zinc-400">{p.userEmail ?? "—"}</td>
                         </tr>
                       ))
                     )}

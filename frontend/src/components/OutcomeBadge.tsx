@@ -14,9 +14,9 @@ export function OutcomeBadge({
   }
   const styles: Record<CallOutcome, string> = {
     SUCCESS:
-      "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
-    FAILURE: "border-red-500/40 bg-red-500/15 text-red-300",
-    OTHER: "border-amber-500/40 bg-amber-500/15 text-amber-200",
+      "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+    FAILURE: "border-red-500/40 bg-red-500/15 text-red-700 dark:text-red-300",
+    OTHER: "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-200",
   };
   return (
     <span

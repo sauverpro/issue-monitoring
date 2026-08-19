@@ -2,7 +2,9 @@ import { Router, type IRouter } from "express";
 import type { Pool } from "pg";
 import { z } from "zod";
 import { requireJwt } from "../middleware/jwt.js";
+import { requireAdmin } from "../middleware/requireAdmin.js";
 import { broadcastSse } from "../sse/hub.js";
+import { incidentLink, notifySlack } from "../services/notifications/slack.js";
 
 const noteSchema = z.object({
   body: z.string().min(1),
@@ -48,7 +50,7 @@ export function incidentsRouter(pool: Pool): IRouter {
     res.json({ incident: inc.rows[0], notes: notes.rows });
   });
 
-  r.post("/incidents/:id/notes", requireJwt, async (req, res) => {
+  r.post("/incidents/:id/notes", requireJwt, requireAdmin, async (req, res) => {
     const parsed = noteSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -63,7 +65,7 @@ export function incidentsRouter(pool: Pool): IRouter {
     res.status(201).json({ note: r2.rows[0] });
   });
 
-  r.patch("/incidents/:id", requireJwt, async (req, res) => {
+  r.patch("/incidents/:id", requireJwt, requireAdmin, async (req, res) => {
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.flatten() });
@@ -72,10 +74,17 @@ export function incidentsRouter(pool: Pool): IRouter {
     const id = req.params.id;
     const status = parsed.data.status;
     if (status === "resolved") {
-      await pool.query(
-        `UPDATE incidents SET status = $2, resolved_at = now(), auto_resolved = false, resolution_reason = $3 WHERE id = $1`,
+      const upd = await pool.query<{ service: string; title: string }>(
+        `UPDATE incidents SET status = $2, resolved_at = now(), auto_resolved = false, resolution_reason = $3
+         WHERE id = $1 RETURNING service, title`,
         [id, status, "Manually resolved"]
       );
+      const row = upd.rows[0];
+      if (row) {
+        void notifySlack(
+          `:white_check_mark: *${row.service}* manually resolved by ${req.auth?.email ?? "an operator"} — ${row.title}\n${incidentLink(id)}`
+        );
+      }
     } else {
       await pool.query(
         `UPDATE incidents SET status = $2 WHERE id = $1`,

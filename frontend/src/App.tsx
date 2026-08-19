@@ -15,6 +15,9 @@ import { MonitoringIssues } from "@/pages/monitoring/Issues";
 import { MonitoringIssueDetail } from "@/pages/monitoring/IssueDetail";
 import { ApiDocs } from "@/pages/ApiDocs";
 import { SentrySync } from "@/pages/SentrySync";
+import { Status } from "@/pages/Status";
+import { Users } from "@/pages/Users";
+import { UptimePage } from "@/pages/monitoring/Uptime";
 
 function Protected({ children }: { children: ReactNode }) {
   const { auth } = useAuth();
@@ -23,6 +26,14 @@ function Protected({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace state={{ from: loc }} />;
   }
   return <Layout>{children}</Layout>;
+}
+
+function RequireAdmin({ children }: { children: ReactNode }) {
+  const { auth } = useAuth();
+  if (auth.role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+  return <>{children}</>;
 }
 
 function SessionLegacyRedirect() {
@@ -37,6 +48,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/status" element={<Status />} />
       <Route
         path="/"
         element={
@@ -122,6 +134,24 @@ export default function App() {
         element={
           <Protected>
             <SessionAnalyticsPage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/monitoring/uptime"
+        element={
+          <Protected>
+            <UptimePage />
+          </Protected>
+        }
+      />
+      <Route
+        path="/settings/users"
+        element={
+          <Protected>
+            <RequireAdmin>
+              <Users />
+            </RequireAdmin>
           </Protected>
         }
       />

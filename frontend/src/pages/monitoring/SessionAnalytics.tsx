@@ -14,8 +14,17 @@ import {
 import { apiFetch } from "@/lib/api";
 import { Skeleton } from "@/components/Skeleton";
 import type { SessionAnalytics } from "@/types/session";
+import { useTheme } from "@/lib/theme";
+
+function chartTheme(theme: "light" | "dark") {
+  return theme === "light"
+    ? { grid: "#e4e4e7", tooltipBg: "#ffffff", tooltipBorder: "#e4e4e7" }
+    : { grid: "#27272a", tooltipBg: "#18181b", tooltipBorder: "#3f3f46" };
+}
 
 export function SessionAnalyticsPage() {
+  const { theme } = useTheme();
+  const ct = chartTheme(theme);
   const [data, setData] = useState<SessionAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -49,17 +58,17 @@ export function SessionAnalyticsPage() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Session analytics</h1>
-          <p className="mt-1 text-sm text-zinc-400">
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-white">Session analytics</h1>
+          <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-400">
             Volume, error rates, and failing endpoints from ingested Sentry data.
           </p>
         </div>
-        <label className="flex items-center gap-2 text-xs text-zinc-500">
+        <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500">
           Window
           <select
             value={days}
             onChange={(e) => setDays(Number(e.target.value))}
-            className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-2 py-1.5 text-sm text-zinc-800 dark:text-zinc-100"
           >
             <option value={1}>1 day</option>
             <option value={7}>7 days</option>
@@ -70,7 +79,7 @@ export function SessionAnalyticsPage() {
       </div>
 
       {err && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200">
           {err}
         </div>
       )}
@@ -83,21 +92,21 @@ export function SessionAnalyticsPage() {
       ) : (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-              <p className="text-xs text-zinc-500">Failed API calls</p>
-              <p className="mt-1 text-2xl font-semibold text-red-300">
+            <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/40 p-4">
+              <p className="text-xs text-zinc-600 dark:text-zinc-500">Failed API calls</p>
+              <p className="mt-1 text-2xl font-semibold text-red-700 dark:text-red-300">
                 {data.failedApiCalls}
               </p>
             </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-              <p className="text-xs text-zinc-500">Active users</p>
-              <p className="mt-1 text-2xl font-semibold text-zinc-100">
+            <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/40 p-4">
+              <p className="text-xs text-zinc-600 dark:text-zinc-500">Active users</p>
+              <p className="mt-1 text-2xl font-semibold text-zinc-800 dark:text-zinc-100">
                 {data.activeUsers}
               </p>
             </div>
-            <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-4">
-              <p className="text-xs text-zinc-500">Avg actions / session</p>
-              <p className="mt-1 text-2xl font-semibold text-zinc-100">
+            <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/40 dark:bg-zinc-900/40 p-4">
+              <p className="text-xs text-zinc-600 dark:text-zinc-500">Avg actions / session</p>
+              <p className="mt-1 text-2xl font-semibold text-zinc-800 dark:text-zinc-100">
                 {data.averageActionsPerSession.toFixed(1)}
               </p>
             </div>
@@ -107,13 +116,13 @@ export function SessionAnalyticsPage() {
             <ChartCard title="Session volume">
               <ResponsiveContainer width="100%" height={240}>
                 <LineChart data={data.sessionVolume}>
-                  <CartesianGrid stroke="#27272a" />
+                  <CartesianGrid stroke={ct.grid} />
                   <XAxis dataKey="date" tick={{ fill: "#71717a", fontSize: 11 }} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #3f3f46",
+                      background: ct.tooltipBg,
+                      border: `1px solid ${ct.tooltipBorder}`,
                     }}
                   />
                   <Line
@@ -135,13 +144,13 @@ export function SessionAnalyticsPage() {
                     errorPct: s.errorRate * 100,
                   }))}
                 >
-                  <CartesianGrid stroke="#27272a" />
+                  <CartesianGrid stroke={ct.grid} />
                   <XAxis dataKey="service" tick={{ fill: "#71717a", fontSize: 11 }} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #3f3f46",
+                      background: ct.tooltipBg,
+                      border: `1px solid ${ct.tooltipBorder}`,
                     }}
                   />
                   <Bar dataKey="errorPct" fill="#f87171" name="Error %" />
@@ -153,21 +162,21 @@ export function SessionAnalyticsPage() {
           <ChartCard title="Top failing endpoints">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
-                <thead className="text-left text-xs uppercase text-zinc-500">
+                <thead className="text-left text-xs uppercase text-zinc-600 dark:text-zinc-500">
                   <tr>
                     <th className="pb-2">Endpoint</th>
                     <th className="pb-2 text-right">Failures</th>
                     <th className="pb-2 text-right">Users</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-800">
+                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
                   {data.topFailingEndpoints.map((ep) => (
                     <tr key={ep.endpoint}>
-                      <td className="max-w-md truncate py-2 font-mono text-xs text-emerald-400/90">
+                      <td className="max-w-md truncate py-2 font-mono text-xs text-emerald-600/90 dark:text-emerald-400/90">
                         {ep.endpoint}
                       </td>
-                      <td className="py-2 text-right text-red-300">{ep.failures}</td>
-                      <td className="py-2 text-right text-zinc-400">
+                      <td className="py-2 text-right text-red-700 dark:text-red-300">{ep.failures}</td>
+                      <td className="py-2 text-right text-zinc-700 dark:text-zinc-400">
                         {ep.uniqueUsers}
                       </td>
                     </tr>
@@ -190,8 +199,8 @@ function ChartCard({
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/30 p-4">
-      <h2 className="mb-4 text-sm font-medium text-zinc-400">{title}</h2>
+    <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-900/30 p-4">
+      <h2 className="mb-4 text-sm font-medium text-zinc-700 dark:text-zinc-400">{title}</h2>
       {children}
     </div>
   );

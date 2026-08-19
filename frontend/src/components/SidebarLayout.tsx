@@ -14,11 +14,14 @@ import {
   RefreshCw,
   Route as RouteIcon,
   ScrollText,
+  ShieldCheck,
+  TrendingUp,
   User,
-  Users,
+  Users as UsersIcon,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useState } from "react";
+import { ThemeToggle } from "./ThemeToggle";
 
 type NavItem = {
   to: string;
@@ -37,12 +40,17 @@ const mainNav: NavItem[] = [
 
 const monitoringNav: NavItem[] = [
   { to: "/monitoring/issues", label: "Issues", icon: Bug },
-  { to: "/monitoring/sessions", label: "Sessions", icon: Users },
+  { to: "/monitoring/sessions", label: "Sessions", icon: UsersIcon },
   { to: "/monitoring/session-analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/monitoring/uptime", label: "Uptime / SLA", icon: TrendingUp },
 ];
 
 const developerNav: NavItem[] = [
   { to: "/api-docs", label: "Analyst APIs & Docs", icon: Code2 },
+];
+
+const settingsNav: NavItem[] = [
+  { to: "/settings/users", label: "Users", icon: ShieldCheck },
 ];
 
 function NavSection({
@@ -71,8 +79,8 @@ function NavSection({
             clsx(
               "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               isActive
-                ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/20"
-                : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-100",
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500/20"
+                : "text-zinc-700 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-800 dark:hover:text-zinc-100",
               collapsed && "justify-center px-2"
             )
           }
@@ -91,23 +99,23 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <div className="flex min-h-screen bg-zinc-950">
+    <div className="flex min-h-screen bg-white dark:bg-zinc-950">
       <aside
         className={clsx(
-          "sticky top-0 flex h-screen shrink-0 flex-col border-r border-zinc-800/80 bg-zinc-950/95 backdrop-blur transition-[width]",
+          "sticky top-0 flex h-screen shrink-0 flex-col border-r border-zinc-200/80 dark:border-zinc-800/80 bg-white/95 dark:bg-zinc-950/95 backdrop-blur transition-[width]",
           collapsed ? "w-[68px]" : "w-60"
         )}
       >
-        <div className="flex h-14 items-center gap-2 border-b border-zinc-800/80 px-3">
+        <div className="flex h-14 items-center gap-2 border-b border-zinc-200/80 dark:border-zinc-800/80 px-3">
           <Link
             to="/"
             className={clsx(
-              "flex min-w-0 flex-1 items-center gap-2 font-semibold text-zinc-100",
+              "flex min-w-0 flex-1 items-center gap-2 font-semibold text-zinc-800 dark:text-zinc-100",
               collapsed && "justify-center"
             )}
           >
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-500/30">
-              <Activity className="h-4 w-4 text-emerald-400" />
+              <Activity className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             </span>
             {!collapsed && (
               <span className="truncate text-sm tracking-tight">Koralink</span>
@@ -116,7 +124,7 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
-            className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-300"
+            className="rounded-md p-1.5 text-zinc-600 dark:text-zinc-500 hover:bg-zinc-50 dark:hover:bg-zinc-900 hover:text-zinc-600 dark:hover:text-zinc-300"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? (
@@ -131,28 +139,32 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
           <NavSection title="Main" items={mainNav} collapsed={collapsed} />
           <NavSection title="Monitoring" items={monitoringNav} collapsed={collapsed} />
           <NavSection title="Developer & PowerBI" items={developerNav} collapsed={collapsed} />
+          {auth.role === "admin" && (
+            <NavSection title="Settings" items={settingsNav} collapsed={collapsed} />
+          )}
         </nav>
 
-        <div className="border-t border-zinc-800/80 p-3">
+        <div className="border-t border-zinc-200/80 dark:border-zinc-800/80 p-3">
           <div
             className={clsx(
-              "flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/50 p-2",
+              "flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/50 p-2",
               collapsed && "flex-col"
             )}
           >
-            <User className="h-4 w-4 shrink-0 text-zinc-500" />
+            <User className="h-4 w-4 shrink-0 text-zinc-600 dark:text-zinc-500" />
             {!collapsed && (
-              <span className="min-w-0 flex-1 truncate text-xs text-zinc-400">
+              <span className="min-w-0 flex-1 truncate text-xs text-zinc-700 dark:text-zinc-400">
                 {auth.email ?? "User"}
               </span>
             )}
+            <ThemeToggle className="rounded p-1 text-zinc-600 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-800" />
             <button
               type="button"
               onClick={() => {
                 logout();
                 navigate("/login", { replace: true });
               }}
-              className="rounded p-1 text-zinc-500 hover:bg-zinc-800 hover:text-red-300"
+              className="rounded p-1 text-zinc-600 dark:text-zinc-500 hover:bg-zinc-200 hover:text-red-500 dark:hover:bg-zinc-800 dark:hover:text-red-300"
               title="Log out"
             >
               <LogOut className="h-4 w-4" />

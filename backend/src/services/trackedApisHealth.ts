@@ -43,6 +43,10 @@ function warnSchemaOnce(message: string): void {
   console.warn(`[tracked-apis] ${message}`);
 }
 
+export function trackedApiDefinitions(): Def[] {
+  return definitions();
+}
+
 function definitions(): Def[] {
   const u = config.trackedApiUrls;
   return [

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,8 +10,15 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Applied before paint to avoid a flash of the wrong theme.
+      (function () {
+        var stored = localStorage.getItem("koralink_theme");
+        document.documentElement.classList.toggle("dark", stored !== "light");
+      })();
+    </script>
   </head>
-  <body class="bg-zinc-950 text-zinc-100 antialiased">
+  <body class="antialiased">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

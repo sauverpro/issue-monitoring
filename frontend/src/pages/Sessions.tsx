@@ -73,17 +73,17 @@ export function Sessions() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">
           Sessions
         </h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-400">
           User journeys from Sentry mobile telemetry, grouped by{" "}
-          <code className="text-zinc-500">session_id</code>.
+          <code className="text-zinc-600 dark:text-zinc-500">session_id</code>.
         </p>
       </div>
 
       <div className="flex flex-wrap gap-3">
-        <label className="flex items-center gap-2 text-xs text-zinc-500">
+        <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500">
           Window
           <select
             value={windowId}
@@ -91,7 +91,7 @@ export function Sessions() {
               setOffset(0);
               setWindowId(e.target.value as typeof windowId);
             }}
-            className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-2 py-1.5 text-sm text-zinc-800 dark:text-zinc-100"
           >
             {WINDOWS.map((w) => (
               <option key={w.id} value={w.id}>
@@ -100,7 +100,7 @@ export function Sessions() {
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-2 text-xs text-zinc-500">
+        <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500">
           <input
             type="checkbox"
             checked={hasFailures}
@@ -108,11 +108,11 @@ export function Sessions() {
               setOffset(0);
               setHasFailures(e.target.checked);
             }}
-            className="rounded border-zinc-700"
+            className="rounded border-zinc-300 dark:border-zinc-700"
           />
           Failures only
         </label>
-        <label className="flex items-center gap-2 text-xs text-zinc-500">
+        <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500">
           User email
           <input
             value={userEmail}
@@ -121,10 +121,10 @@ export function Sessions() {
               setUserEmail(e.target.value);
             }}
             placeholder="filter by email…"
-            className="w-48 rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100"
+            className="w-48 rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-2 py-1.5 text-sm text-zinc-800 dark:text-zinc-100"
           />
         </label>
-        <label className="flex items-center gap-2 text-xs text-zinc-500">
+        <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500">
           App service
           <select
             value={appService}
@@ -132,7 +132,7 @@ export function Sessions() {
               setOffset(0);
               setAppService(e.target.value);
             }}
-            className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-1.5 text-sm text-zinc-100"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-2 py-1.5 text-sm text-zinc-800 dark:text-zinc-100"
           >
             <option value="">All</option>
             <option value="auth">auth</option>
@@ -145,14 +145,14 @@ export function Sessions() {
       </div>
 
       {err && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200">
           {err}
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-900/30">
+      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-900/30">
         <table className="min-w-full text-left text-sm">
-          <thead className="border-b border-zinc-800 bg-zinc-950/50 text-[11px] uppercase tracking-wide text-zinc-500">
+          <thead className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 text-[11px] uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
             <tr>
               <th className="px-3 py-2">Session</th>
               <th className="px-3 py-2">User</th>
@@ -165,16 +165,16 @@ export function Sessions() {
               <th className="px-3 py-2" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-800">
+          <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
             {loading ? (
               <tr>
-                <td colSpan={9} className="px-3 py-8 text-center text-zinc-500">
+                <td colSpan={9} className="px-3 py-8 text-center text-zinc-600 dark:text-zinc-500">
                   Loading…
                 </td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-10 text-center text-zinc-500">
+                <td colSpan={9} className="px-3 py-10 text-center text-zinc-600 dark:text-zinc-500">
                   No sessions in this window.
                 </td>
               </tr>
@@ -184,39 +184,39 @@ export function Sessions() {
                   new Date(s.ended_at).getTime() -
                   new Date(s.started_at).getTime();
                 return (
-                  <tr key={s.session_id} className="hover:bg-zinc-900/40">
-                    <td className="max-w-[180px] truncate px-3 py-2 font-mono text-xs text-zinc-300">
+                  <tr key={s.session_id} className="hover:bg-zinc-50/40 dark:hover:bg-zinc-900/40">
+                    <td className="max-w-[180px] truncate px-3 py-2 font-mono text-xs text-zinc-600 dark:text-zinc-300">
                       {s.session_id}
                     </td>
-                    <td className="px-3 py-2 text-zinc-300">
+                    <td className="px-3 py-2 text-zinc-600 dark:text-zinc-300">
                       {s.user_email ?? s.user_id ?? "—"}
                     </td>
-                    <td className="px-3 py-2 text-zinc-500">
+                    <td className="px-3 py-2 text-zinc-600 dark:text-zinc-500">
                       {s.role ?? "—"}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-400">
+                    <td className="whitespace-nowrap px-3 py-2 text-xs text-zinc-700 dark:text-zinc-400">
                       {new Date(s.started_at).toISOString()}
                     </td>
-                    <td className="px-3 py-2 text-zinc-400">
+                    <td className="px-3 py-2 text-zinc-700 dark:text-zinc-400">
                       {formatDuration(durationMs)}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-zinc-300">
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-600 dark:text-zinc-300">
                       {s.total_events}
                     </td>
                     <td
                       className={`px-3 py-2 text-right tabular-nums ${
-                        s.failure_events > 0 ? "text-red-300" : "text-zinc-500"
+                        s.failure_events > 0 ? "text-red-700 dark:text-red-300" : "text-zinc-600 dark:text-zinc-500"
                       }`}
                     >
                       {s.failure_events}
                     </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-zinc-400">
+                    <td className="px-3 py-2 text-right tabular-nums text-zinc-700 dark:text-zinc-400">
                       {s.distinct_endpoints}
                     </td>
                     <td className="px-3 py-2">
                       <Link
                         to={`/sessions/${encodeURIComponent(s.session_id)}`}
-                        className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300"
+                        className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                       >
                         View
                         <ArrowRight className="h-3.5 w-3.5" />
@@ -230,7 +230,7 @@ export function Sessions() {
         </table>
       </div>
 
-      <div className="flex items-center justify-between text-sm text-zinc-500">
+      <div className="flex items-center justify-between text-sm text-zinc-600 dark:text-zinc-500">
         <span>
           Showing {items.length} of {total}
         </span>
@@ -239,7 +239,7 @@ export function Sessions() {
             type="button"
             disabled={offset === 0}
             onClick={() => setOffset((o) => Math.max(0, o - limit))}
-            className="rounded-md border border-zinc-800 px-3 py-1.5 hover:bg-zinc-900 disabled:opacity-40"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900 disabled:opacity-40"
           >
             Previous
           </button>
@@ -247,7 +247,7 @@ export function Sessions() {
             type="button"
             disabled={offset + limit >= total}
             onClick={() => setOffset((o) => o + limit)}
-            className="rounded-md border border-zinc-800 px-3 py-1.5 hover:bg-zinc-900 disabled:opacity-40"
+            className="rounded-md border border-zinc-200 dark:border-zinc-800 px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900 disabled:opacity-40"
           >
             Next
           </button>

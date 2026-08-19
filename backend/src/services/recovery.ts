@@ -8,16 +8,23 @@ import {
 import { getErrorRateLast5Minutes } from "./slidingWindow.js";
 import { resolveOpenIncident } from "./incidents.js";
 import { broadcastSse } from "../sse/hub.js";
+import { incidentLink, notifySlack } from "./notifications/slack.js";
 
 export function startRecoveryScheduler(pool: Pool): NodeJS.Timeout {
   return setInterval(() => {
-    void runRecoveryTick(pool);
+    runRecoveryTick(pool).catch((e) => console.error("[recovery] tick failed", e));
   }, RECOVERY_TICK_MS);
 }
 
 async function runRecoveryTick(pool: Pool): Promise<void> {
   for (const service of SERVICES) {
-    const client = await pool.connect();
+    let client;
+    try {
+      client = await pool.connect();
+    } catch (e) {
+      console.error("recovery tick: connect failed", service, e);
+      continue;
+    }
     try {
       await client.query("BEGIN");
 
@@ -62,6 +69,9 @@ async function runRecoveryTick(pool: Pool): Promise<void> {
           service,
           autoResolved: true,
         });
+        void notifySlack(
+          `:white_check_mark: *${service}* recovered — error rate back below 5% for two consecutive checks\n${incidentLink(resolvedId)}`
+        );
       }
     } catch (e) {
       await client.query("ROLLBACK");

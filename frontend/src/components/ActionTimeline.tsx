@@ -10,9 +10,9 @@ import {
 const PAGE_SIZE = 50;
 
 const outcomeStyles = {
-  success: "border-emerald-500/40 bg-emerald-500/10 text-emerald-300",
-  failure: "border-red-500/40 bg-red-500/10 text-red-300",
-  warning: "border-amber-500/40 bg-amber-500/10 text-amber-200",
+  success: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  failure: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+  warning: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200",
 };
 
 export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
@@ -21,7 +21,7 @@ export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
 
   if (actions.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-zinc-500">No actions recorded.</p>
+      <p className="py-8 text-center text-sm text-zinc-600 dark:text-zinc-500">No actions recorded.</p>
     );
   }
 
@@ -41,7 +41,7 @@ export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
             >
               <div className="min-w-0 flex-1">
                 <p className="font-mono text-sm">
-                  <span className="text-zinc-500">[{action.actionIndex}]</span>{" "}
+                  <span className="text-zinc-600 dark:text-zinc-500">[{action.actionIndex}]</span>{" "}
                   {label}
                 </p>
                 {action.failureReason && (
@@ -59,7 +59,7 @@ export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
                       ? action.httpStatus ?? "Failed"
                       : "Warning"}
                 </span>
-                <span className="tabular-nums text-zinc-400">
+                <span className="tabular-nums text-zinc-700 dark:text-zinc-400">
                   {formatTime(action.timestamp)}
                 </span>
               </div>
@@ -71,7 +71,7 @@ export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
         <button
           type="button"
           onClick={() => setVisible((v) => v + PAGE_SIZE)}
-          className="w-full rounded-md border border-zinc-800 py-2 text-sm text-zinc-400 hover:bg-zinc-900"
+          className="w-full rounded-md border border-zinc-200 dark:border-zinc-800 py-2 text-sm text-zinc-700 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-900"
         >
           Load more ({actions.length - visible} remaining)
         </button>

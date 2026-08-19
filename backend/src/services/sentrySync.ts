@@ -93,6 +93,10 @@ function parseNextLink(link: string | null): string | null {
   return null;
 }
 
+function safeSync(pool: Pool): void {
+  runSentryDiscoverSync(pool).catch((e) => console.error("[sentry-sync] run failed", e));
+}
+
 export function startSentrySyncScheduler(pool: Pool): NodeJS.Timeout | null {
   if (!config.sentry.authToken) {
     console.log("[sentry-sync] disabled (SENTRY_AUTH_TOKEN not set)");
@@ -100,8 +104,6 @@ export function startSentrySyncScheduler(pool: Pool): NodeJS.Timeout | null {
   }
   const ms = config.sentry.syncIntervalMs;
   console.log(`[sentry-sync] polling every ${ms / 1000}s`);
-  void runSentryDiscoverSync(pool);
-  return setInterval(() => {
-    void runSentryDiscoverSync(pool);
-  }, ms);
+  safeSync(pool);
+  return setInterval(() => safeSync(pool), ms);
 }

@@ -29,25 +29,34 @@ Manual deployment guide for hosting the backend on a **shared VPS** (Ubuntu/Debi
 
 ## Architecture
 
+> For the full telemetry → incident → recovery workflow, see **[System Workflow](./SYSTEM-WORKFLOW.md)**.
+
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │              VPS (Ubuntu)                   │
-                    │                                             │
-  HTTPS :443       │  ┌─────────┐       ┌──────────────────┐    │
- ──────────────────┼──│  Nginx  │──────▶│  Node.js :3000   │    │
-                    │  │ (proxy) │       │  (PM2 managed)   │    │
-                    │  └─────────┘       └────────┬─────────┘    │
-                    │       │                      │              │
-                    │       │ other apps           │ DATABASE_URL │
-                    │       ▼                      ▼              │
-                    │  ┌─────────┐       ┌──────────────────┐    │
-                    │  │ App A,  │       │  PostgreSQL      │    │
-                    │  │ App B   │       │  :5432           │    │
-                    │  └─────────┘       └──────────────────┘    │
-                    └─────────────────────────────────────────────┘
+  Mobile app / Sentry          React dashboard (Vercel or static)
+         │                              │
+         │ POST /events                 │ JWT API calls + SSE
+         ▼                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    VPS (Ubuntu)                             │
+│  HTTPS :443                                                 │
+│  ┌─────────┐       ┌──────────────────┐                    │
+│  │  Nginx  │──────▶│  Node.js API     │                    │
+│  │ (proxy) │       │  (PM2 managed)   │                    │
+│  └─────────┘       └────────┬─────────┘                    │
+│       │                     │                               │
+│       │ other apps          │ DATABASE_URL                  │
+│       ▼                     ▼                               │
+│  ┌─────────┐       ┌──────────────────┐                    │
+│  │ App A,  │       │  PostgreSQL      │                    │
+│  │ App B   │       │  :5432           │                    │
+│  └─────────┘       └──────────────────┘                    │
+└─────────────────────────────────────────────────────────────┘
+
+Public status page (/status) reads GET /api/status — no auth required.
+Background jobs: recovery, synthetic pings, retention, Sentry sync.
 ```
 
-**Stack**: Express.js (TypeScript) → PostgreSQL 16 → Nginx → Let's Encrypt SSL
+**Stack**: Express.js (TypeScript) → PostgreSQL 16 → Nginx → Let's Encrypt SSL · React frontend (separate deploy)
 
 ---
 
@@ -207,6 +216,16 @@ TRACKED_KORALINK_URL=https://www.koralink.org
 TRACKED_GWIZA_URL=https://openapi.gwiza.tech
 TRACKED_DDIN_URL=https://core-api.ddin.rw/v1/agency
 TRACKED_TICKETS_URL=https://resolveit.rw
+
+# ── Data retention ───────────────────────────────────────────────────────────
+# Days of raw api_events kept before the nightly retention sweep deletes them.
+RETENTION_DAYS=30
+
+# ── Incident alerts (optional) ────────────────────────────────────────────────
+# Slack incoming webhook URL; leave blank to disable alerts.
+SLACK_WEBHOOK_URL=
+# Public dashboard base URL, used to build incident links in Slack messages.
+DASHBOARD_URL=https://your-dashboard-domain.com
 
 # ── Sentry (optional) ───────────────────────────────────────────────────────
 SENTRY_AUTH_TOKEN=

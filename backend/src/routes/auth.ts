@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import type { Pool } from "pg";
-import { signJwt } from "../middleware/jwt.js";
+import { signJwt, type DashboardRole } from "../middleware/jwt.js";
 
 const loginSchema = z.object({
   email: z.string().email(),
@@ -18,8 +18,12 @@ export function authRouter(pool: Pool): IRouter {
       return;
     }
     const { email, password } = parsed.data;
-    const q = await pool.query<{ id: string; password_hash: string }>(
-      `SELECT id, password_hash FROM dashboard_users WHERE email = $1`,
+    const q = await pool.query<{
+      id: string;
+      password_hash: string;
+      role: DashboardRole;
+    }>(
+      `SELECT id, password_hash, role FROM dashboard_users WHERE email = $1`,
       [email]
     );
     const row = q.rows[0];
@@ -27,8 +31,8 @@ export function authRouter(pool: Pool): IRouter {
       res.status(401).json({ error: "Invalid credentials" });
       return;
     }
-    const token = signJwt(row.id, email);
-    res.json({ token, email });
+    const token = signJwt(row.id, email, row.role);
+    res.json({ token, email, role: row.role });
   });
   return r;
 }

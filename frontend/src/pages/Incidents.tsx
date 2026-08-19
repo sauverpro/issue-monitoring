@@ -41,25 +41,25 @@ export function Incidents() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">
           Incidents
         </h1>
-        <p className="mt-1 text-sm text-zinc-400">
+        <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-400">
           Auto-opened when rolling error rates cross thresholds; add notes and
           resolve manually when appropriate.
         </p>
       </div>
       {err && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-200">
           {err}
         </div>
       )}
       {loading ? (
         <Skeleton className="h-64 w-full" />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/30">
+        <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/30 dark:bg-zinc-900/30">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-zinc-800 bg-zinc-950/50 text-xs uppercase tracking-wide text-zinc-500">
+            <thead className="border-b border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 text-xs uppercase tracking-wide text-zinc-600 dark:text-zinc-500">
               <tr>
                 <th className="px-4 py-3 font-medium">Title</th>
                 <th className="px-4 py-3 font-medium">Service</th>
@@ -69,36 +69,36 @@ export function Incidents() {
                 <th className="w-10 px-4 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-800">
+            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
               {items.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-4 py-10 text-center text-zinc-500"
+                    className="px-4 py-10 text-center text-zinc-600 dark:text-zinc-500"
                   >
                     No incidents recorded yet.
                   </td>
                 </tr>
               ) : (
                 items.map((i) => (
-                  <tr key={i.id} className="hover:bg-zinc-900/50">
-                    <td className="max-w-md px-4 py-3 font-medium text-zinc-100">
+                  <tr key={i.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/50">
+                    <td className="max-w-md px-4 py-3 font-medium text-zinc-800 dark:text-zinc-100">
                       {i.title}
                     </td>
-                    <td className="px-4 py-3 text-zinc-400">{i.service}</td>
-                    <td className="px-4 py-3 text-zinc-400">{i.severity}</td>
+                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-400">{i.service}</td>
+                    <td className="px-4 py-3 text-zinc-700 dark:text-zinc-400">{i.severity}</td>
                     <td className="px-4 py-3">
-                      <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300">
+                      <span className="rounded-md bg-zinc-200 dark:bg-zinc-800 px-2 py-0.5 text-xs text-zinc-600 dark:text-zinc-300">
                         {i.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-zinc-500 tabular-nums">
+                    <td className="px-4 py-3 text-zinc-600 dark:text-zinc-500 tabular-nums">
                       {new Date(i.opened_at).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
                       <Link
                         to={`/incidents/${i.id}`}
-                        className="inline-flex text-emerald-400 hover:text-emerald-300"
+                        className="inline-flex text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
                         aria-label={`Open incident ${i.id}`}
                       >
                         <ArrowRight className="h-4 w-4" />
