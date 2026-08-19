@@ -4,6 +4,7 @@ import { ApiMetricCard } from "@/components/ApiMetricCard";
 import { QuickActions } from "@/components/QuickActions";
 import { Skeleton } from "@/components/Skeleton";
 import { apiFetch } from "@/lib/api";
+import { SERVICES, SERVICE_LABELS } from "@/lib/services";
 import { useAuth } from "@/lib/auth";
 import { useMonitorSse } from "@/hooks/useMonitorSse";
 import { StatusBadge, type ServiceStatus } from "@/components/StatusBadge";
@@ -108,12 +109,7 @@ export function Overview() {
 
   const sse = useMonitorSse(load, !!auth.token);
 
-  const services = ["DDIN", "MVEND", "KORALINK"] as const;
-  const SERVICE_LABELS: Record<(typeof services)[number], string> = {
-    DDIN: "DDIN Digital Services API",
-    MVEND: "MVEND / Gwiza Payments API",
-    KORALINK: "Koralink Core API",
-  };
+  const services = SERVICES;
   const summary = dash?.summary;
 
   // Exact calculations for overall system health
@@ -178,7 +174,11 @@ export function Overview() {
             </h1>
             <p className="max-w-3xl text-sm text-zinc-700 dark:text-zinc-400 leading-relaxed">
               Monitoring real-time API uptime, response latencies, and user session reliability across{" "}
-              <strong className="text-zinc-700 dark:text-zinc-200">DDIN</strong>, <strong className="text-zinc-700 dark:text-zinc-200">MVEND</strong> &amp; <strong className="text-zinc-700 dark:text-zinc-200">KORALINK</strong> product lines and integrated upstream services.
+              <strong className="text-zinc-700 dark:text-zinc-200">MVEND</strong>,{" "}
+              <strong className="text-zinc-700 dark:text-zinc-200">Koralink</strong>,{" "}
+              <strong className="text-zinc-700 dark:text-zinc-200">DDIN</strong>,{" "}
+              <strong className="text-zinc-700 dark:text-zinc-200">Integra</strong> &amp;{" "}
+              <strong className="text-zinc-700 dark:text-zinc-200">ResolveIt</strong>.
             </p>
           </div>
 
@@ -295,11 +295,13 @@ export function Overview() {
               What this monitors
             </h3>
             <p className="leading-relaxed">
-              Koralink Monitor watches every API call the Koralink marketplace app makes across
-              three backend product lines: <strong className="text-zinc-700 dark:text-zinc-200">DDIN</strong>{" "}
-              (digital financial services), <strong className="text-zinc-700 dark:text-zinc-200">MVEND / Gwiza</strong>{" "}
-              (wallet &amp; payments), and <strong className="text-zinc-700 dark:text-zinc-200">KORALINK</strong> (the
-              core marketplace API). Every request is captured in real time — via direct
+              Koralink Monitor watches every API call the marketplace app makes to five
+              tracked backends: <strong className="text-zinc-700 dark:text-zinc-200">MVEND</strong>{" "}
+              (Gwiza payments), <strong className="text-zinc-700 dark:text-zinc-200">Koralink</strong>{" "}
+              (core marketplace API), <strong className="text-zinc-700 dark:text-zinc-200">DDIN</strong>{" "}
+              (digital services), <strong className="text-zinc-700 dark:text-zinc-200">Integra</strong>{" "}
+              (Intelligra), and <strong className="text-zinc-700 dark:text-zinc-200">ResolveIt</strong>{" "}
+              (ticketing). Every request is captured in real time — via direct
               instrumentation and Sentry — and classified as a{" "}
               <span className="font-semibold text-emerald-600 dark:text-emerald-400">success</span>,{" "}
               <span className="font-semibold text-rose-400">failure</span>, or{" "}
@@ -370,7 +372,7 @@ export function Overview() {
                 The mobile app (and Sentry) send every API call to the monitor backend.
               </li>
               <li>
-                Each event updates a 5-minute rolling error rate per service (DDIN, MVEND, KORALINK).
+                Each event updates a 5-minute rolling error rate per service (MVEND, KORALINK, DDIN, INTEGRA, RESOLVEIT).
               </li>
               <li>
                 When the rate crosses 5% (degraded) or 60% (down), an incident opens automatically and
@@ -458,7 +460,7 @@ export function Overview() {
                 <div>
                   <span
                     className="text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400"
-                    title="Total number of API calls recorded across DDIN, MVEND, and KORALINK during the selected time window."
+                    title="Total number of API calls recorded across MVEND, Koralink, DDIN, Integra, and ResolveIt during the selected time window."
                   >
                     Total API Volume
                   </span>
@@ -570,9 +572,9 @@ export function Overview() {
                 <div>
                   <span
                     className="text-[10px] font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-400"
-                    title="Number of backend product lines being tracked and how many currently show a healthy (operational) status."
+                    title="Number of tracked APIs and how many currently show a healthy (operational) status."
                   >
-                    Core Product Lines
+                    Tracked APIs
                   </span>
                   <dd className="mt-1 text-3xl font-extrabold tracking-tight text-zinc-900 dark:text-white">
                     {services.length} / {services.length}
@@ -613,26 +615,31 @@ export function Overview() {
       {/* Navigation Quick Action Grid */}
       <QuickActions />
 
-      {/* Product Line Performance Section (DDIN, MVEND & KORALINK) */}
+      {/* Product Line Performance Section */}
       <section className="space-y-4">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-bold text-zinc-900 dark:text-white">
               <Layers className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              Core Product Line Health
+              Tracked API Health
             </h2>
             <p className="text-xs text-zinc-700 dark:text-zinc-400">
-              Aggregated telemetry for primary application services — <strong className="text-zinc-600 dark:text-zinc-300">DDIN</strong> (Digital Services API), <strong className="text-zinc-600 dark:text-zinc-300">MVEND</strong> (Gwiza Digital Payments API), and <strong className="text-zinc-600 dark:text-zinc-300">KORALINK</strong> (Core API)
+              Aggregated telemetry for the five APIs the app calls —{" "}
+              <strong className="text-zinc-600 dark:text-zinc-300">MVEND</strong> (Gwiza),{" "}
+              <strong className="text-zinc-600 dark:text-zinc-300">KORALINK</strong> (djyh.rw),{" "}
+              <strong className="text-zinc-600 dark:text-zinc-300">DDIN</strong>,{" "}
+              <strong className="text-zinc-600 dark:text-zinc-300">INTEGRA</strong>, and{" "}
+              <strong className="text-zinc-600 dark:text-zinc-300">RESOLVEIT</strong>
             </p>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
           {loading && !dash ? (
             <>
-              <Skeleton className="h-[440px]" />
-              <Skeleton className="h-[440px]" />
-              <Skeleton className="h-[440px]" />
+              {services.map((svc) => (
+                <Skeleton key={svc} className="h-[440px]" />
+              ))}
             </>
           ) : (
             services.map((svc) => {

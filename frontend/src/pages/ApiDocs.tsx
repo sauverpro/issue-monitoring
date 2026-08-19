@@ -61,7 +61,7 @@ const ENDPOINTS: EndpointDef[] = [
     category: "Telemetry",
     desc: "Line-item log feed of API calls containing endpoint, status code, latency, outcome, service, user context, and failure reasons for PowerBI Fact tables.",
     params: [
-      { name: "service", type: "string", default: "", desc: "Filter by product line", options: ["ALL", "DDIN", "MVEND", "KORALINK"] },
+      { name: "service", type: "string", default: "", desc: "Filter by tracked API", options: ["ALL", "DDIN", "MVEND", "KORALINK", "INTEGRA", "RESOLVEIT"] },
       { name: "outcome", type: "string", default: "", desc: "Filter by outcome", options: ["ALL", "SUCCESS", "FAILURE", "OTHER"] },
       { name: "limit", type: "number", default: "500", desc: "Number of records (max 5000)" },
       { name: "format", type: "string", default: "json", desc: "Output format", options: ["json", "csv"] },
@@ -88,7 +88,7 @@ const ENDPOINTS: EndpointDef[] = [
     method: "GET",
     path: "/api/powerbi/upstream-health",
     category: "SLA & Vendors",
-    desc: "Evaluates vendor SLAs across integrated upstream endpoints (Koralink, Gwiza, DDIN, ResolveIt) with latency percentiles (P50 & P95) and error rates.",
+    desc: "Evaluates vendor SLAs across the five tracked APIs (MVEND, Koralink, DDIN, Integra, ResolveIt) with latency percentiles (P50 & P95) and error rates.",
     params: [
       { name: "window", type: "string", default: "24h", desc: "Evaluation window", options: ["1h", "6h", "24h", "7d", "30d"] },
       { name: "format", type: "string", default: "json", desc: "Output format", options: ["json", "csv"] },

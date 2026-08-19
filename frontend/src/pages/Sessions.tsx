@@ -139,7 +139,9 @@ export function Sessions() {
             <option value="marketplace">marketplace</option>
             <option value="gwiza">gwiza</option>
             <option value="ddin_digital_services">ddin_digital_services</option>
+            <option value="djyh">djyh</option>
             <option value="integra_phones">integra_phones</option>
+            <option value="resolveit">resolveit</option>
           </select>
         </label>
       </div>

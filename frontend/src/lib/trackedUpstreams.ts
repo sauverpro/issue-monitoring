@@ -1,28 +1,36 @@
 /**
- * Reference: upstream bases Koralink clients may call and forward to POST /events.
- * `service` on each event is still DDIN or MVEND — map vendor calls in the app when ingesting.
+ * The five APIs the Koralink app calls. Sentry events are classified onto
+ * these services from the request URL host (see backend sentryServiceMap).
  */
 export const TRACKED_UPSTREAM_APIS = [
   {
-    label: "Koralink main API",
-    envHint: "primary backend",
-    baseUrl: "https://www.koralink.org",
-  },
-  {
-    label: "Gwiza / MVEND digital services",
-    envHint: "OpenAPI (payments & digital services)",
-    baseUrl: "https://openapi.gwiza.tech",
+    label: "MVEND / Gwiza Payments",
+    envHint: "openapi.gwiza.tech",
+    baseUrl: "https://openapi.gwiza.tech/",
     typicalService: "MVEND" as const,
   },
   {
-    label: "DDIN digital services",
-    envHint: "DIGITAL_SERVICES_BASE_URL",
-    baseUrl: "https://core-api.ddin.rw/v1/agency",
+    label: "Koralink Core API",
+    envHint: "www.djyh.rw/api/v1",
+    baseUrl: "https://www.djyh.rw/api/v1/",
+    typicalService: "KORALINK" as const,
+  },
+  {
+    label: "DDIN Digital Services",
+    envHint: "core-api.ddin.rw/v1",
+    baseUrl: "https://core-api.ddin.rw/v1/",
     typicalService: "DDIN" as const,
   },
   {
-    label: "Tickets (Resolve It)",
-    envHint: "TICKETS_BASE_URL",
-    baseUrl: "https://resolveit.rw",
+    label: "Integra / Intelligra",
+    envHint: "rw-prod.intelligra.io",
+    baseUrl: "https://rw-prod.intelligra.io/intelligrapi/",
+    typicalService: "INTEGRA" as const,
+  },
+  {
+    label: "ResolveIt Ticketing",
+    envHint: "resolveit.rw",
+    baseUrl: "https://resolveit.rw/",
+    typicalService: "RESOLVEIT" as const,
   },
 ] as const;

@@ -56,7 +56,7 @@ Each event is stored in `api_events` and linked to a `user_sessions` row when `s
 
 ## 2. Health Evaluation (per event)
 
-After insert, the backend recalculates rolling health for the affected **service** (DDIN, MVEND, KORALINK) and **upstream endpoint**:
+After insert, the backend recalculates rolling health for the affected **service** (MVEND, KORALINK, DDIN, INTEGRA, RESOLVEIT) and **upstream endpoint**:
 
 1. **Sliding window** — error rate over the last 5 minutes (`slidingWindow.ts`).
 2. **Status mapping**:
@@ -133,13 +133,15 @@ Login issues a JWT (`POST /auth/login`). Protected API routes validate the token
 
 ## 7. Monitored Services
 
-| Code | Description |
-|------|-------------|
-| **DDIN** | Digital financial services API |
-| **MVEND** | Gwiza wallet & payments API |
-| **KORALINK** | Core marketplace API |
+| Code | API | Base URL |
+|------|-----|----------|
+| **MVEND** | Gwiza digital payments | https://openapi.gwiza.tech/ |
+| **KORALINK** | Marketplace core API | https://www.djyh.rw/api/v1/ |
+| **DDIN** | Digital services API | https://core-api.ddin.rw/v1/ |
+| **INTEGRA** | Intelligra API | https://rw-prod.intelligra.io/intelligrapi/ |
+| **RESOLVEIT** | Ticket management ([ResolveIt](https://resolveit.rw)) | https://resolveit.rw |
 
-Each service has independent health state, incidents, and uptime tracking. **Tracked upstream APIs** (discovered from client requests or configured definitions) are evaluated separately and shown on the Overview and Endpoints pages.
+Sentry events are classified onto these services from the request URL host first, then from `tags[service]`. Each service has independent health state, incidents, and uptime tracking. **Tracked upstream APIs** (discovered from client requests or configured definitions) are evaluated separately and shown on the Overview and Endpoints pages.
 
 ---
 

@@ -212,10 +212,11 @@ ADMIN_PASSWORD=ChangeThisPassword!
 PORT=3002
 
 # ── Tracked APIs ─────────────────────────────────────────────────────────────
-TRACKED_KORALINK_URL=https://www.koralink.org
-TRACKED_GWIZA_URL=https://openapi.gwiza.tech
-TRACKED_DDIN_URL=https://core-api.ddin.rw/v1/agency
-TRACKED_TICKETS_URL=https://resolveit.rw
+TRACKED_GWIZA_URL=https://openapi.gwiza.tech/
+TRACKED_KORALINK_URL=https://www.djyh.rw/api/v1/
+TRACKED_DDIN_URL=https://core-api.ddin.rw/v1/
+TRACKED_INTEGRA_URL=https://rw-prod.intelligra.io/intelligrapi/
+TRACKED_RESOLVEIT_URL=https://resolveit.rw/
 
 # ── Data retention ───────────────────────────────────────────────────────────
 # Days of raw api_events kept before the nightly retention sweep deletes them.

@@ -33,7 +33,7 @@ export function TrackedApisPanel({
       <div>
         <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-400">External APIs (reference)</h2>
         <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-500">
-          The four upstreams from your environment reference. Metrics include events where{" "}
+          The five APIs the Koralink app calls. Metrics include events where{" "}
           <code className="text-zinc-700 dark:text-zinc-400">upstream_key</code> matches the row id{" "}
           <span className="text-zinc-600">or</span> <code className="text-zinc-700 dark:text-zinc-400">request_url</code>{" "}
           contains that API&apos;s host. Override base URLs with{" "}

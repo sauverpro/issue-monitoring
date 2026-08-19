@@ -59,7 +59,7 @@ export function Status() {
             </span>
             <div>
               <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Koralink Status</h1>
-              <p className="text-sm text-zinc-600 dark:text-zinc-500">Live health of DDIN, MVEND, and KORALINK</p>
+              <p className="text-sm text-zinc-600 dark:text-zinc-500">Live health of MVEND, Koralink, DDIN, Integra, and ResolveIt</p>
             </div>
           </div>
           <ThemeToggle className="rounded-md p-2 text-zinc-600 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-900" />

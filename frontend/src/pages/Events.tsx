@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { TRACKED_UPSTREAM_APIS } from "@/lib/trackedUpstreams";
+import { SERVICES } from "@/lib/services";
 import { OutcomeBadge } from "@/components/OutcomeBadge";
 
 type Row = {
@@ -103,7 +104,7 @@ export function Events() {
             ))}
           </ul>
           <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-500">
-            Use <code className="text-zinc-700 dark:text-zinc-400">service</code> (DDIN, MVEND, or KORALINK) for the product line, and
+            Use <code className="text-zinc-700 dark:text-zinc-400">service</code> (MVEND, KORALINK, DDIN, INTEGRA, or RESOLVEIT) for the API that was called, and
             a stable <code className="text-zinc-700 dark:text-zinc-400">upstream_key</code> per integrated API (e.g.{" "}
             <code className="text-zinc-700 dark:text-zinc-400">ddin_agency_verify</code>).
           </p>
@@ -122,9 +123,11 @@ export function Events() {
             className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-2 py-1.5 text-sm text-zinc-800 dark:text-zinc-100"
           >
             <option value="">All</option>
-            <option value="DDIN">DDIN</option>
-            <option value="MVEND">MVEND</option>
-            <option value="KORALINK">KORALINK</option>
+            {SERVICES.map((svc) => (
+              <option key={svc} value={svc}>
+                {svc}
+              </option>
+            ))}
           </select>
         </label>
         <label className="flex items-center gap-2 text-xs text-zinc-600 dark:text-zinc-500">
