@@ -13,6 +13,8 @@ export type SentryEventMeta = {
   sentry_type?: string;
   failure_reason?: string;
   ingest_source?: IngestSource;
+  http_method?: string;
+  current_screen?: string;
 };
 
 export type PersistEventInput = IngestEventInput & SentryEventMeta;

@@ -24,5 +24,34 @@ export const SENTRY_DISCOVER_FIELDS = [
   "tags[failure_reason]",
   "tags[role]",
   "tags[account_type]",
+  "tags[current_screen]",
+  "tags[duration_ms]",
   "project.name",
 ] as const;
+
+/** Fields for the spans dataset (http.client calls to tracked APIs). */
+export const SENTRY_SPAN_FIELDS = [
+  "id",
+  "timestamp",
+  "span.op",
+  "span.description",
+  "span.status",
+  "span.duration",
+  "span.id",
+  "http.request.method",
+  "transaction",
+  "transaction.event_id",
+  "transaction.span_id",
+  "user.id",
+  "user.email",
+  "tags[session_id]",
+  "tags[service]",
+  "tags[http_status]",
+  "tags[role]",
+  "tags[account_type]",
+  "tags[current_screen]",
+  "tags[user_id]",
+] as const;
+
+export const SENTRY_SPAN_QUERY =
+  "span.op:http.client AND (span.description:*gwiza.tech* OR span.description:*djyh.rw* OR span.description:*core-api.ddin.rw* OR span.description:*intelligra.io* OR span.description:*resolveit.rw* OR span.description:*koralink.org*)";

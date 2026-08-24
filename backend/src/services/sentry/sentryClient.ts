@@ -1,6 +1,10 @@
 import { config } from "../../config.js";
-import { SENTRY_DISCOVER_FIELDS } from "./discoverFields.js";
+import { SENTRY_DISCOVER_FIELDS, SENTRY_SPAN_FIELDS, SENTRY_SPAN_QUERY } from "./discoverFields.js";
 import type { SessionAction } from "../../types/sessionInvestigation.js";
+import {
+  journeyActionsFromBreadcrumbs,
+  type JourneyActionInput,
+} from "../sentryBreadcrumbs.js";
 
 export type SentryDiscoverRow = Record<string, unknown>;
 
@@ -30,6 +34,8 @@ export function rowToSessionAction(row: SentryDiscoverRow): SessionAction | null
 
   const actionIndexRaw = tag(row, "action_index");
   const actionIndex = actionIndexRaw ? parseInt(actionIndexRaw, 10) : 0;
+  const endpoint = tag(row, "endpoint") || str(row, "transaction") || null;
+  const method = tag(row, "method") || str(row, "http.request.method") || null;
 
   return {
     id: str(row, "id"),
@@ -37,23 +43,55 @@ export function rowToSessionAction(row: SentryDiscoverRow): SessionAction | null
     message: str(row, "message") || null,
     type: sentryType || null,
     status: tag(row, "status") || null,
-    actionType: tag(row, "action_type") || null,
+    actionType: tag(row, "action_type") || "api_call",
     service: tag(row, "service") || null,
-    method: tag(row, "method") || null,
-    endpoint: tag(row, "endpoint") || null,
+    method,
+    endpoint,
     httpStatus: tag(row, "http_status") || null,
     actionIndex: Number.isFinite(actionIndex) ? actionIndex : 0,
     orderId: tag(row, "order_id") || null,
     failureReason: tag(row, "failure_reason") || null,
     role: tag(row, "role") || null,
     accountType: tag(row, "account_type") || null,
+    screen: tag(row, "current_screen") || str(row, "current_screen") || null,
+    latencyMs: Number(tag(row, "duration_ms") || str(row, "span.duration")) || null,
+    responseBody: null,
+  };
+}
+
+export function journeyToSessionAction(
+  a: JourneyActionInput,
+  index: number
+): SessionAction {
+  return {
+    id: `journey:${a.kind}:${a.occurred_at}:${a.message}`,
+    timestamp: a.occurred_at,
+    message: a.message,
+    type: a.kind,
+    status: a.kind === "auth" ? "success" : "info",
+    actionType: a.kind,
+    service: null,
+    method: null,
+    endpoint: a.screen ?? a.from_screen ?? null,
+    httpStatus: null,
+    actionIndex: index,
+    orderId: null,
+    failureReason: null,
+    role: typeof a.payload?.role === "string" ? a.payload.role : null,
+    accountType: typeof a.payload?.account_type === "string" ? a.payload.account_type : null,
+    screen: a.screen ?? null,
+    latencyMs: null,
+    responseBody: null,
   };
 }
 
 export function sortActionsByIndex(actions: SessionAction[]): SessionAction[] {
   return [...actions].sort((a, b) => {
+    const ta = a.timestamp || "";
+    const tb = b.timestamp || "";
+    if (ta !== tb) return ta.localeCompare(tb);
     if (a.actionIndex !== b.actionIndex) return a.actionIndex - b.actionIndex;
-    return a.timestamp.localeCompare(b.timestamp);
+    return (a.id ?? "").localeCompare(b.id ?? "");
   });
 }
 
@@ -104,17 +142,20 @@ async function readSentryError(res: Response): Promise<never> {
 
 export async function fetchDiscoverEvents(
   query: string,
-  statsPeriod = "14d"
+  statsPeriod = "14d",
+  fields: readonly string[] = SENTRY_DISCOVER_FIELDS,
+  dataset?: string
 ): Promise<SentryDiscoverRow[]> {
   const { org } = config.sentry;
   const params = new URLSearchParams();
-  for (const f of SENTRY_DISCOVER_FIELDS) {
+  for (const f of fields) {
     params.append("field", f);
   }
   params.set("query", query);
   params.set("sort", "-timestamp");
   params.set("per_page", "100");
   params.set("statsPeriod", statsPeriod);
+  if (dataset) params.set("dataset", dataset);
 
   let url: string | null =
     `${sentryApiPath(`/api/0/organizations/${encodeURIComponent(org)}/events/`)}?${params.toString()}`;
@@ -137,6 +178,52 @@ export async function fetchDiscoverEvents(
   return rows;
 }
 
+export async function fetchHttpClientSpans(statsPeriod = "24h"): Promise<SentryDiscoverRow[]> {
+  try {
+    return await fetchDiscoverEvents(
+      SENTRY_SPAN_QUERY,
+      statsPeriod,
+      SENTRY_SPAN_FIELDS,
+      "spans"
+    );
+  } catch (err) {
+    console.warn("[sentry] spans dataset query failed, falling back to events", err);
+    return fetchDiscoverEvents(
+      `transaction.op:http.client AND (${[
+        "transaction:*gwiza.tech*",
+        "transaction:*djyh.rw*",
+        "transaction:*core-api.ddin.rw*",
+        "transaction:*intelligra.io*",
+        "transaction:*resolveit.rw*",
+      ].join(" OR ")})`,
+      statsPeriod,
+      [...SENTRY_DISCOVER_FIELDS, "transaction.op"]
+    );
+  }
+}
+
+export async function fetchSentryEventDetail(
+  eventId: string
+): Promise<Record<string, unknown> | null> {
+  const { org, project } = config.sentry;
+  const url = sentryApiPath(
+    `/api/0/projects/${encodeURIComponent(org)}/${encodeURIComponent(project)}/events/${encodeURIComponent(eventId)}/`
+  );
+  const res = await sentryFetch(url);
+  if (res.status === 404) return null;
+  if (!res.ok) await readSentryError(res);
+  return (await res.json()) as Record<string, unknown>;
+}
+
+export function sessionActionsFromEventDetail(
+  event: Record<string, unknown>,
+  fallbackSessionId: string
+): SessionAction[] {
+  const eventId = String(event.event_id ?? event.id ?? "");
+  const journeys = journeyActionsFromBreadcrumbs(event, fallbackSessionId, eventId);
+  return journeys.map((j, i) => journeyToSessionAction(j, i));
+}
+
 export async function fetchSessionEventsFromSentry(
   sessionId: string
 ): Promise<SessionAction[]> {
@@ -145,9 +232,22 @@ export async function fetchSessionEventsFromSentry(
     "30d"
   );
   const actions: SessionAction[] = [];
+  const seenTxn = new Set<string>();
   for (const row of rows) {
     const action = rowToSessionAction(row);
     if (action) actions.push(action);
+    const txnId = str(row, "id");
+    if (txnId && seenTxn.size < 8 && !seenTxn.has(txnId)) {
+      seenTxn.add(txnId);
+      try {
+        const detail = await fetchSentryEventDetail(txnId);
+        if (detail) {
+          actions.push(...sessionActionsFromEventDetail(detail, sessionId));
+        }
+      } catch (err) {
+        console.warn("[session] event detail fetch failed", txnId, err);
+      }
+    }
   }
   return sortActionsByIndex(actions);
 }

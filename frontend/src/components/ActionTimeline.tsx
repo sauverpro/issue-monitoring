@@ -4,6 +4,7 @@ import type { SessionAction } from "@/types/session";
 import {
   actionOutcome,
   formatActionLabel,
+  formatLatency,
   formatTime,
 } from "@/lib/sessionUtils";
 
@@ -14,6 +15,14 @@ const outcomeStyles = {
   failure: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
   warning: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-200",
 };
+
+function tryFormatJson(s: string): string {
+  try {
+    return JSON.stringify(JSON.parse(s) as unknown, null, 2);
+  } catch {
+    return s;
+  }
+}
 
 export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
   const [visible, setVisible] = useState(PAGE_SIZE);
@@ -31,11 +40,14 @@ export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
         {slice.map((action) => {
           const outcome = actionOutcome(action);
           const label = formatActionLabel(action);
+          const latency = formatLatency(action.latencyMs);
+          const isApi = (action.actionType ?? "api_call") === "api_call" ||
+            (action.actionType ?? "").includes("api");
           return (
             <li
               key={action.id}
               className={clsx(
-                "flex flex-col gap-1 rounded-lg border px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+                "flex flex-col gap-1 rounded-lg border px-4 py-3 sm:flex-row sm:items-start sm:justify-between",
                 outcomeStyles[outcome]
               )}
             >
@@ -44,12 +56,24 @@ export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
                   <span className="text-zinc-600 dark:text-zinc-500">[{action.actionIndex}]</span>{" "}
                   {label}
                 </p>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs opacity-80">
+                  {action.service && <span>{action.service}</span>}
+                  {action.screen && <span>screen {action.screen}</span>}
+                  {latency && isApi && <span>{latency}</span>}
+                </div>
                 {action.failureReason && (
                   <p className="mt-1 text-xs opacity-90">{action.failureReason}</p>
                 )}
-                {action.service && (
-                  <p className="mt-0.5 text-xs opacity-70">{action.service}</p>
-                )}
+                {action.responseBody ? (
+                  <details className="mt-2 cursor-pointer">
+                    <summary className="text-xs font-semibold">View body</summary>
+                    <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-zinc-200 dark:border-zinc-800 bg-white/60 dark:bg-zinc-950/60 p-2 text-[11px] leading-relaxed">
+                      {tryFormatJson(action.responseBody)}
+                    </pre>
+                  </details>
+                ) : isApi ? (
+                  <p className="mt-1 text-[11px] opacity-50">Response body —</p>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-3 text-xs">
                 <span className="font-semibold uppercase tracking-wide">
@@ -57,7 +81,9 @@ export function ActionTimeline({ actions }: { actions: SessionAction[] }) {
                     ? "Success"
                     : outcome === "failure"
                       ? action.httpStatus ?? "Failed"
-                      : "Warning"}
+                      : action.httpStatus && action.httpStatus !== "info"
+                        ? action.httpStatus
+                        : "Warning"}
                 </span>
                 <span className="tabular-nums text-zinc-700 dark:text-zinc-400">
                   {formatTime(action.timestamp)}

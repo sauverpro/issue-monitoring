@@ -21,6 +21,9 @@ export type SessionAction = {
   failureReason: string | null;
   role: string | null;
   accountType: string | null;
+  screen?: string | null;
+  latencyMs?: number | null;
+  responseBody?: string | null;
 };
 
 export type SessionSummary = {
