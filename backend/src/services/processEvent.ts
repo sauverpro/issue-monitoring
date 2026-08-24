@@ -64,6 +64,34 @@ async function upsertUserSession(
   );
 }
 
+async function findNearDuplicate(
+  client: DbQueryable,
+  raw: PersistEventInput,
+  occurredAt: Date
+): Promise<{ id: string; is_span: boolean } | null> {
+  const url = raw.request_url ?? raw.endpoint;
+  if (!url) return null;
+  const result = await client.query<{ id: string; sentry_type: string | null; sentry_event_id: string | null }>(
+    `SELECT id::text, sentry_type, sentry_event_id
+     FROM api_events
+     WHERE occurred_at BETWEEN $1::timestamptz - interval '2 seconds'
+                           AND $1::timestamptz + interval '2 seconds'
+       AND (request_url = $2 OR endpoint = $2)
+       AND (
+         ($3::text IS NOT NULL AND user_id = $3)
+         OR ($4::text IS NOT NULL AND session_id = $4)
+       )
+     LIMIT 5`,
+    [occurredAt.toISOString(), url, raw.user_id ?? null, raw.session_id ?? null]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  const is_span =
+    row.sentry_type === "http.client" ||
+    (row.sentry_event_id ?? "").startsWith("span:");
+  return { id: row.id, is_span };
+}
+
 export async function persistAndProcessEvent(
   pool: Pool,
   raw: PersistEventInput
@@ -103,11 +131,26 @@ export async function persistAndProcessEvent(
       }
     }
 
+    const nearDup = await findNearDuplicate(client, raw, occurredAt);
+    if (nearDup) {
+      if (raw.sentry_type === "http.client") {
+        await client.query("COMMIT");
+        return;
+      }
+      if (nearDup.is_span) {
+        await client.query(`DELETE FROM api_events WHERE id = $1`, [nearDup.id]);
+      } else {
+        await client.query("COMMIT");
+        return;
+      }
+    }
+
     const insertResult = await client.query<{ id: string }>(
       `INSERT INTO api_events
         (service, endpoint, request_url, status_code, latency_ms, error_code, source, session_id, occurred_at, response_body, upstream_key, outcome,
-         sentry_event_id, app_service, action_index, user_id, user_email, user_role, account_type, sentry_type, failure_reason, ingest_source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
+         sentry_event_id, app_service, action_index, user_id, user_email, user_role, account_type, sentry_type, failure_reason, ingest_source,
+         current_screen, http_method)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
        RETURNING id::text`,
       [
         raw.service,
@@ -132,6 +175,8 @@ export async function persistAndProcessEvent(
         raw.sentry_type ?? null,
         raw.failure_reason ?? null,
         raw.ingest_source ?? "direct",
+        raw.current_screen ?? null,
+        raw.http_method ?? null,
       ]
     );
     inserted = insertResult.rows.length > 0;

@@ -41,38 +41,105 @@ async function actionsFromPostgres(
 ): Promise<SessionAction[]> {
   const result = await pool.query(
     `SELECT sentry_event_id, occurred_at, app_service, endpoint, request_url, status_code,
-            outcome, action_index, sentry_type, failure_reason, user_role, account_type
+            outcome, action_index, sentry_type, failure_reason, user_role, account_type,
+            latency_ms, current_screen, http_method, response_body, service
      FROM api_events
      WHERE session_id = $1
-     ORDER BY COALESCE(action_index, 999999) ASC, occurred_at ASC`,
+     ORDER BY occurred_at ASC, COALESCE(action_index, 999999) ASC`,
     [sessionId]
   );
 
-  return result.rows.map((row) => {
+  const api: SessionAction[] = result.rows.map((row, i) => {
     const status =
       row.outcome === "SUCCESS"
         ? "success"
         : row.outcome === "FAILURE"
           ? "failure"
           : "other";
+    const httpStatus =
+      row.status_code && Number(row.status_code) > 0
+        ? String(row.status_code)
+        : row.failure_reason
+          ? String(row.failure_reason)
+          : row.outcome === "OTHER"
+            ? "FETCH_ERROR"
+            : null;
     return {
-      id: row.sentry_event_id ?? String(row.occurred_at),
+      id: row.sentry_event_id ?? `api:${String(row.occurred_at)}:${i}`,
       timestamp: (row.occurred_at as Date).toISOString(),
       message: null,
       type: row.sentry_type,
       status,
       actionType: "api_call",
-      service: row.app_service,
-      method: null,
+      service: row.service ?? row.app_service,
+      method: row.http_method ?? null,
       endpoint: row.request_url ?? row.endpoint,
-      httpStatus: row.status_code ? String(row.status_code) : null,
-      actionIndex: row.action_index ?? 0,
+      httpStatus,
+      actionIndex: row.action_index ?? i,
       orderId: null,
       failureReason: row.failure_reason,
       role: row.user_role,
       accountType: row.account_type,
+      screen: row.current_screen ?? null,
+      latencyMs: row.latency_ms != null ? Number(row.latency_ms) : null,
+      responseBody: row.response_body ?? null,
     };
   });
+
+  const journey = await pool.query<{
+    kind: string;
+    occurred_at: Date;
+    message: string | null;
+    screen: string | null;
+    from_screen: string | null;
+    sentry_event_id: string | null;
+    payload: Record<string, unknown> | null;
+  }>(
+    `SELECT kind, occurred_at, message, screen, from_screen, sentry_event_id, payload
+     FROM session_actions
+     WHERE session_id = $1
+     ORDER BY occurred_at ASC`,
+    [sessionId]
+  );
+
+  const journeyActions: SessionAction[] = journey.rows.map((row, i) => ({
+    id: row.sentry_event_id
+      ? `journey:${row.sentry_event_id}:${row.kind}:${i}`
+      : `journey:${row.kind}:${(row.occurred_at as Date).toISOString()}:${i}`,
+    timestamp: (row.occurred_at as Date).toISOString(),
+    message: row.message,
+    type: row.kind,
+    status: row.kind === "auth" ? "success" : "info",
+    actionType: row.kind,
+    service: null,
+    method: null,
+    endpoint: row.screen ?? row.from_screen,
+    httpStatus: null,
+    actionIndex: i,
+    orderId: null,
+    failureReason: null,
+    role: typeof row.payload?.role === "string" ? row.payload.role : null,
+    accountType:
+      typeof row.payload?.account_type === "string" ? row.payload.account_type : null,
+    screen: row.screen,
+    latencyMs: null,
+    responseBody: null,
+  }));
+
+  return [...api, ...journeyActions];
+}
+
+function mergeActions(primary: SessionAction[], extra: SessionAction[]): SessionAction[] {
+  const seen = new Set(primary.map((a) => `${a.actionType}:${a.timestamp}:${a.endpoint ?? a.message ?? a.id}`));
+  const out = [...primary];
+  for (const a of extra) {
+    const key = `${a.actionType}:${a.timestamp}:${a.endpoint ?? a.message ?? a.id}`;
+    if (seen.has(key) || seen.has(a.id)) continue;
+    seen.add(key);
+    seen.add(a.id);
+    out.push(a);
+  }
+  return out;
 }
 
 export async function getSessionActions(
@@ -84,21 +151,19 @@ export async function getSessionActions(
   const cached = cacheGet<SessionActionsResponse>(cacheKey);
   if (cached) return cached;
 
-  let actions: SessionAction[] = [];
+  let actions = await actionsFromPostgres(pool, sessionId);
 
   if (preferSentry && config.sentry.authToken) {
     try {
-      actions = await fetchSessionEventsFromSentry(sessionId);
+      const fromSentry = await fetchSessionEventsFromSentry(sessionId);
+      actions = mergeActions(actions, fromSentry);
     } catch (err) {
-      console.warn("[session] Sentry fetch failed, falling back to Postgres", err);
+      console.warn("[session] Sentry fetch failed, using Postgres", err);
     }
   }
 
-  if (actions.length === 0) {
-    actions = await actionsFromPostgres(pool, sessionId);
-  }
-
   actions = sortActionsByIndex(actions);
+  actions = actions.map((a, i) => ({ ...a, actionIndex: a.actionIndex || i }));
 
   const userFromTags = extractUserFromActions(actions);
   const pgUser = await pool.query<{

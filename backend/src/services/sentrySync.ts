@@ -1,9 +1,22 @@
 import type { Pool } from "pg";
 import { config } from "../config.js";
 import { SENTRY_DISCOVER_FIELDS } from "./sentry/discoverFields.js";
-import { enqueueSentryPayload } from "./eventQueue.js";
+import { enqueueSentryPayload, enqueuePersistEvent } from "./eventQueue.js";
+import { fetchHttpClientSpans, fetchSentryEventDetail } from "./sentry/sentryClient.js";
+import {
+  normalizeHttpSpan,
+  normalizeSentryRow,
+} from "./sentryNormalizer.js";
+import {
+  applyEnrichment,
+  enrichmentFromBreadcrumbs,
+  journeyActionsFromBreadcrumbs,
+} from "./sentryBreadcrumbs.js";
+import { persistSessionActions } from "./sessionActions.js";
+import type { PersistEventInput } from "../types/persistEvent.js";
 
 const DISCOVER_FIELDS = [...SENTRY_DISCOVER_FIELDS];
+const MAX_FAILED_SPAN_ENRICH = 15;
 
 export async function runSentryDiscoverSync(pool: Pool): Promise<void> {
   const { authToken, org, discoverQuery } = config.sentry;
@@ -14,22 +27,63 @@ export async function runSentryDiscoverSync(pool: Pool): Promise<void> {
   );
   const lastSynced = stateRow.rows[0]?.last_synced_at;
 
+  let newest: Date | null = null;
+  let totalAccepted = 0;
+
+  const tagged = await pullDiscoverPages(
+    `${config.sentry.baseUrl}/api/0/organizations/${encodeURIComponent(org)}/events/?${discoverParams(discoverQuery)}`,
+    lastSynced
+  );
+  newest = maxDate(newest, tagged.newest);
+  totalAccepted += tagged.accepted;
+
+  try {
+    const spanRows = await fetchHttpClientSpans("24h");
+    const spanResult = await ingestSpanRows(pool, spanRows, lastSynced);
+    newest = maxDate(newest, spanResult.newest);
+    totalAccepted += spanResult.accepted;
+  } catch (err) {
+    console.error("[sentry-sync] span ingest failed", err);
+  }
+
+  if (newest) {
+    await pool.query(
+      `UPDATE sentry_sync_state SET last_synced_at = $1, updated_at = now() WHERE id = 1`,
+      [newest.toISOString()]
+    );
+  }
+
+  if (totalAccepted > 0) {
+    console.log(`[sentry-sync] queued ${totalAccepted} events`);
+  }
+}
+
+function discoverParams(discoverQuery: string): string {
   const params = new URLSearchParams();
   for (const f of DISCOVER_FIELDS) {
     params.append("field", f);
   }
-  if (discoverQuery) {
-    params.set("query", discoverQuery);
-  }
+  if (discoverQuery) params.set("query", discoverQuery);
   params.set("sort", "-timestamp");
   params.set("per_page", "100");
   params.set("statsPeriod", "24h");
+  return params.toString();
+}
 
-  let url: string | null =
-    `${config.sentry.baseUrl}/api/0/organizations/${encodeURIComponent(org)}/events/?${params.toString()}`;
+function maxDate(a: Date | null, b: Date | null): Date | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a > b ? a : b;
+}
 
+async function pullDiscoverPages(
+  startUrl: string,
+  lastSynced: Date | null
+): Promise<{ newest: Date | null; accepted: number }> {
+  const { authToken } = config.sentry;
+  let url: string | null = startUrl;
   let newest: Date | null = null;
-  let totalAccepted = 0;
+  let accepted = 0;
 
   while (url) {
     const res = await fetch(url, {
@@ -56,29 +110,70 @@ export async function runSentryDiscoverSync(pool: Pool): Promise<void> {
         hitOld = true;
         continue;
       }
-      if (occurred && (!newest || occurred > newest)) {
-        newest = occurred;
-      }
-      totalAccepted += enqueueSentryPayload({ data: [row] });
+      if (occurred && (!newest || occurred > newest)) newest = occurred;
+      accepted += enqueueSentryPayload({ data: [row] });
     }
 
     if (hitOld && rows.length < 100) break;
-
-    const link = res.headers.get("link");
-    url = parseNextLink(link);
+    url = parseNextLink(res.headers.get("link"));
     if (hitOld) break;
   }
 
-  if (newest) {
-    await pool.query(
-      `UPDATE sentry_sync_state SET last_synced_at = $1, updated_at = now() WHERE id = 1`,
-      [newest.toISOString()]
-    );
+  return { newest, accepted };
+}
+
+async function ingestSpanRows(
+  pool: Pool,
+  rows: unknown[],
+  lastSynced: Date | null
+): Promise<{ newest: Date | null; accepted: number }> {
+  let newest: Date | null = null;
+  let accepted = 0;
+  let enrichLeft = MAX_FAILED_SPAN_ENRICH;
+
+  for (const raw of rows) {
+    const row = raw as Record<string, unknown>;
+    if (!row["span.op"] && (row["span.description"] || row["transaction"])) {
+      row["span.op"] = "http.client";
+    }
+    const ts = row.timestamp;
+    const occurred = ts ? new Date(String(ts)) : null;
+    if (occurred && lastSynced && occurred <= lastSynced) continue;
+    if (occurred && (!newest || occurred > newest)) newest = occurred;
+
+    let event = normalizeHttpSpan(row) ?? normalizeSentryRow(row);
+    if (!event) continue;
+
+    const txnId = String(row["transaction.event_id"] ?? "");
+    const failed = event.outcome === "FAILURE" || event.outcome === "OTHER";
+    if (failed && txnId && enrichLeft > 0) {
+      enrichLeft -= 1;
+      try {
+        const detail = await fetchSentryEventDetail(txnId);
+        if (detail) {
+          event = applyEnrichment(
+            event,
+            enrichmentFromBreadcrumbs(detail, event.request_url)
+          );
+          const journeys = journeyActionsFromBreadcrumbs(
+            detail,
+            event.session_id ?? "",
+            txnId
+          );
+          if (journeys.length) {
+            await persistSessionActions(pool, journeys);
+          }
+        }
+      } catch (err) {
+        console.warn("[sentry-sync] failed span enrichment", txnId, err);
+      }
+    }
+
+    enqueuePersistEvent(event);
+    accepted += 1;
   }
 
-  if (totalAccepted > 0) {
-    console.log(`[sentry-sync] queued ${totalAccepted} events`);
-  }
+  return { newest, accepted };
 }
 
 function parseNextLink(link: string | null): string | null {
@@ -106,4 +201,9 @@ export function startSentrySyncScheduler(pool: Pool): NodeJS.Timeout | null {
   console.log(`[sentry-sync] polling every ${ms / 1000}s`);
   safeSync(pool);
   return setInterval(() => safeSync(pool), ms);
+}
+
+/** Used by sync-status preview to include span rows. */
+export function normalizeAnySentryRow(row: Record<string, unknown>): PersistEventInput | null {
+  return normalizeSentryRow(row);
 }

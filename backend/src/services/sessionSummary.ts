@@ -4,25 +4,39 @@ import type {
   SessionFailure,
 } from "../types/sessionInvestigation.js";
 
-function isFailure(action: SessionAction): boolean {
-  const st = (action.status ?? "").toLowerCase();
-  if (st === "failure" || st === "error") return true;
-  const t = (action.type ?? "").toLowerCase();
-  if (t.includes("failure")) return true;
-  const http = parseInt(action.httpStatus ?? "", 10);
-  if (!Number.isNaN(http) && http >= 400) return true;
-  if (
-    action.httpStatus &&
-    ["PARSING_ERROR", "NETWORK_ERROR", "TIMEOUT"].includes(
-      action.httpStatus.toUpperCase()
-    )
-  ) {
-    return true;
+const NETWORK_OTHER = new Set([
+  "FETCH_ERROR",
+  "NETWORK_ERROR",
+  "TIMEOUT",
+  "PARSING_ERROR",
+]);
+
+export function isApiCall(action: SessionAction): boolean {
+  const t = (action.actionType ?? "").toLowerCase();
+  if (t === "navigation" || t === "lifecycle" || t === "auth") return false;
+  if (t === "api_call" || t.includes("api") || t.includes("payment")) return true;
+  if (!t) {
+    return Boolean(action.endpoint || action.httpStatus || action.method);
   }
   return false;
 }
 
+function isFailure(action: SessionAction): boolean {
+  if (!isApiCall(action)) return false;
+  const httpRaw = (action.httpStatus ?? "").toUpperCase();
+  if (NETWORK_OTHER.has(httpRaw)) return false;
+  const st = (action.status ?? "").toLowerCase();
+  if (st === "other") return false;
+  if (st === "failure" || st === "error") return true;
+  const t = (action.type ?? "").toLowerCase();
+  if (t.includes("failure") && !NETWORK_OTHER.has(httpRaw)) return true;
+  const http = parseInt(action.httpStatus ?? "", 10);
+  if (!Number.isNaN(http) && http >= 400) return true;
+  return false;
+}
+
 function isSuccess(action: SessionAction): boolean {
+  if (!isApiCall(action)) return false;
   const st = (action.status ?? "").toLowerCase();
   if (st === "success") return true;
   const http = parseInt(action.httpStatus ?? "", 10);
@@ -31,11 +45,10 @@ function isSuccess(action: SessionAction): boolean {
 }
 
 export function buildSessionSummary(actions: SessionAction[]): SessionSummary {
-  const successfulActions = actions.filter(isSuccess).length;
-  const failedActions = actions.filter(isFailure).length;
-  const apiCalls = actions.filter(
-    (a) => (a.actionType ?? "").toLowerCase() === "api_call"
-  ).length;
+  const api = actions.filter(isApiCall);
+  const successfulActions = api.filter(isSuccess).length;
+  const failedActions = api.filter(isFailure).length;
+  const apiCalls = api.length;
   const totalActions = actions.length;
   const timestamps = actions
     .map((a) => a.timestamp)
@@ -47,7 +60,7 @@ export function buildSessionSummary(actions: SessionAction[]): SessionSummary {
     successfulActions,
     failedActions,
     apiCalls,
-    errorRate: totalActions > 0 ? failedActions / totalActions : 0,
+    errorRate: apiCalls > 0 ? failedActions / apiCalls : 0,
     startedAt: timestamps[0] ?? null,
     endedAt: timestamps[timestamps.length - 1] ?? null,
   };
