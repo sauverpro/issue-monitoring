@@ -1,0 +1,3 @@
+# GitHub Packages (copy into the consuming app, not this repo)
+@koralink:registry=https://npm.pkg.github.com
+# //npm.pkg.github.com/:_authToken=${NPM_TOKEN}

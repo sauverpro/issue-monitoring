@@ -31,7 +31,7 @@ type NavItem = {
 };
 
 const mainNav: NavItem[] = [
-  { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
+  { to: "/ops", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/incidents", label: "Incidents", icon: ListTree },
   { to: "/events", label: "Event log", icon: ScrollText },
   { to: "/endpoints", label: "Endpoints", icon: RouteIcon },
@@ -46,7 +46,7 @@ const monitoringNav: NavItem[] = [
 ];
 
 const developerNav: NavItem[] = [
-  { to: "/api-docs", label: "Analyst APIs & Docs", icon: Code2 },
+  { to: "/api-docs", label: "Power BI & Analyst APIs", icon: Code2 },
 ];
 
 const settingsNav: NavItem[] = [
@@ -108,7 +108,7 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
       >
         <div className="flex h-14 items-center gap-2 border-b border-zinc-200/80 dark:border-zinc-800/80 px-3">
           <Link
-            to="/"
+            to="/ops"
             className={clsx(
               "flex min-w-0 flex-1 items-center gap-2 font-semibold text-zinc-800 dark:text-zinc-100",
               collapsed && "justify-center"
@@ -162,7 +162,7 @@ export function SidebarLayout({ children }: { children: ReactNode }) {
               type="button"
               onClick={() => {
                 logout();
-                navigate("/login", { replace: true });
+                navigate("/ops/login", { replace: true });
               }}
               className="rounded p-1 text-zinc-600 dark:text-zinc-500 hover:bg-zinc-200 hover:text-red-500 dark:hover:bg-zinc-800 dark:hover:text-red-300"
               title="Log out"

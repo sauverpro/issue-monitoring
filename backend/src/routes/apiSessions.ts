@@ -26,7 +26,7 @@ const listQuery = z.object({
 export function apiSessionsRouter(pool: Pool): IRouter {
   const r = Router();
 
-  r.use(sentryRateLimit);
+  r.use(["/api/sessions", "/session-investigation", "/sessions"], sentryRateLimit);
 
   r.get(["/api/sessions", "/session-investigation"], requireJwt, async (req, res) => {
     const parsed = listQuery.safeParse(req.query);

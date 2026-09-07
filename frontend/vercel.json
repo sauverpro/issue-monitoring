@@ -69,6 +69,18 @@
       "destination": "http://159.198.43.247/api/:path*"
     },
     {
+      "source": "/console/:path*",
+      "destination": "http://159.198.43.247/console/:path*"
+    },
+    {
+      "source": "/ingest/:path*",
+      "destination": "http://159.198.43.247/ingest/:path*"
+    },
+    {
+      "source": "/sdk/:path*",
+      "destination": "http://159.198.43.247/sdk/:path*"
+    },
+    {
       "source": "/health",
       "destination": "http://159.198.43.247/health"
     },

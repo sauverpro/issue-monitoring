@@ -5,6 +5,14 @@ import {
   journeyActionsFromBreadcrumbs,
   type JourneyActionInput,
 } from "../sentryBreadcrumbs.js";
+import {
+  SentryApiError,
+  isTransientSentryError,
+  isTransientSentryStatus,
+  summarizeSentryBody,
+} from "./sentryErrors.js";
+
+export { SentryApiError, isTransientSentryError, isTransientSentryStatus, summarizeSentryBody };
 
 export type SentryDiscoverRow = Record<string, unknown>;
 
@@ -106,33 +114,48 @@ function parseNextLink(link: string | null): string | null {
   return null;
 }
 
-async function sentryFetch(url: string): Promise<Response> {
+const FETCH_TIMEOUT_MS = 20_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function sentryFetch(url: string): Promise<Response> {
   const { authToken } = config.sentry;
   if (!authToken) {
     throw new Error("SENTRY_AUTH_TOKEN not configured");
   }
-  return fetch(url, {
-    headers: {
-      Authorization: `Bearer ${authToken}`,
-      Accept: "application/json",
-    },
-  });
+  let lastTimeout: unknown;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+      if (isTransientSentryStatus(res.status) && attempt === 0) {
+        await sleep(1500);
+        continue;
+      }
+      return res;
+    } catch (err) {
+      lastTimeout = err;
+      if (isTransientSentryError(err) && attempt === 0) {
+        await sleep(1500);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastTimeout instanceof Error ? lastTimeout : new Error("Sentry fetch failed");
 }
 
 function sentryApiPath(path: string): string {
   const base = config.sentry.baseUrl;
   const p = path.startsWith("/") ? path : `/${path}`;
   return `${base}${p}`;
-}
-
-export class SentryApiError extends Error {
-  constructor(
-    public readonly status: number,
-    body: string
-  ) {
-    super(`Sentry API ${status}: ${body.slice(0, 200)}`);
-    this.name = "SentryApiError";
-  }
 }
 
 async function readSentryError(res: Response): Promise<never> {
@@ -178,6 +201,12 @@ export async function fetchDiscoverEvents(
   return rows;
 }
 
+function shortSentryErr(err: unknown): string {
+  if (err instanceof SentryApiError) return err.message;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 export async function fetchHttpClientSpans(statsPeriod = "24h"): Promise<SentryDiscoverRow[]> {
   try {
     return await fetchDiscoverEvents(
@@ -187,18 +216,32 @@ export async function fetchHttpClientSpans(statsPeriod = "24h"): Promise<SentryD
       "spans"
     );
   } catch (err) {
-    console.warn("[sentry] spans dataset query failed, falling back to events", err);
-    return fetchDiscoverEvents(
-      `transaction.op:http.client AND (${[
-        "transaction:*gwiza.tech*",
-        "transaction:*djyh.rw*",
-        "transaction:*core-api.ddin.rw*",
-        "transaction:*intelligra.io*",
-        "transaction:*resolveit.rw*",
-      ].join(" OR ")})`,
-      statsPeriod,
-      [...SENTRY_DISCOVER_FIELDS, "transaction.op"]
-    );
+    if (isTransientSentryError(err)) {
+      console.warn(
+        `[sentry] spans query skipped (${shortSentryErr(err)}). Not falling back — Sentry is overloaded.`
+      );
+      return [];
+    }
+    console.warn(`[sentry] spans dataset unavailable, falling back to events (${shortSentryErr(err)})`);
+    try {
+      return await fetchDiscoverEvents(
+        `transaction.op:http.client AND (${[
+          "transaction:*gwiza.tech*",
+          "transaction:*djyh.rw*",
+          "transaction:*core-api.ddin.rw*",
+          "transaction:*intelligra.io*",
+          "transaction:*resolveit.rw*",
+        ].join(" OR ")})`,
+        statsPeriod,
+        [...SENTRY_DISCOVER_FIELDS, "transaction.op"]
+      );
+    } catch (fallbackErr) {
+      if (isTransientSentryError(fallbackErr)) {
+        console.warn(`[sentry] events fallback skipped (${shortSentryErr(fallbackErr)})`);
+        return [];
+      }
+      throw fallbackErr;
+    }
   }
 }
 

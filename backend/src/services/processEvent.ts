@@ -12,7 +12,7 @@ import {
   updateIncidentSeverity,
 } from "./incidents.js";
 import { broadcastSse } from "../sse/hub.js";
-import type { ServiceName } from "../constants.js";
+import { SERVICES, type ServiceName } from "../constants.js";
 import type { DbQueryable } from "./slidingWindow.js";
 import { incidentLink, notifySlack } from "./notifications/slack.js";
 
@@ -26,8 +26,10 @@ async function upsertUserSession(
 
   await client.query(
     `INSERT INTO user_sessions
-      (session_id, started_at, ended_at, last_action_index, user_id, user_email, role, account_type, total_events, failure_events, distinct_endpoints, updated_at)
-     VALUES ($1, $2, $2, $3, $4, $5, $6, $7, 1, $8, 1, now())
+      (session_id, started_at, ended_at, last_action_index, user_id, user_email, role, account_type,
+       total_events, failure_events, distinct_endpoints, updated_at,
+       project_id, platform, os, app_version, network)
+    VALUES ($1, $2, $2, $3, $4, $5, $6, $7, 1, $8, 1, now(), $9, $10, $11, $12, $13)
      ON CONFLICT (session_id) DO UPDATE SET
        started_at = LEAST(user_sessions.started_at, EXCLUDED.started_at),
        ended_at = GREATEST(user_sessions.ended_at, EXCLUDED.ended_at),
@@ -41,6 +43,11 @@ async function upsertUserSession(
        account_type = COALESCE(EXCLUDED.account_type, user_sessions.account_type),
        total_events = user_sessions.total_events + 1,
        failure_events = user_sessions.failure_events + $8,
+       project_id = COALESCE(EXCLUDED.project_id, user_sessions.project_id),
+       platform = COALESCE(EXCLUDED.platform, user_sessions.platform),
+       os = COALESCE(EXCLUDED.os, user_sessions.os),
+       app_version = COALESCE(EXCLUDED.app_version, user_sessions.app_version),
+       network = COALESCE(EXCLUDED.network, user_sessions.network),
        updated_at = now()`,
     [
       raw.session_id,
@@ -51,16 +58,23 @@ async function upsertUserSession(
       raw.user_role ?? null,
       raw.account_type ?? null,
       failureInc,
+      raw.project_id ?? null,
+      raw.platform ?? null,
+      raw.os ?? null,
+      raw.app_version ?? null,
+      raw.network ?? null,
     ]
   );
 
   await client.query(
     `UPDATE user_sessions SET distinct_endpoints = (
        SELECT COUNT(DISTINCT COALESCE(request_url, endpoint))::int
-       FROM api_events WHERE session_id = $1
+       FROM api_events
+       WHERE session_id = $1
+         AND ($2::uuid IS NULL OR project_id IS NULL OR project_id = $2)
      )
      WHERE session_id = $1`,
-    [raw.session_id]
+    [raw.session_id, raw.project_id ?? null]
   );
 }
 
@@ -68,11 +82,16 @@ async function findNearDuplicate(
   client: DbQueryable,
   raw: PersistEventInput,
   occurredAt: Date
-): Promise<{ id: string; is_span: boolean } | null> {
+): Promise<{ id: string; is_span: boolean; ingest_source: string } | null> {
   const url = raw.request_url ?? raw.endpoint;
   if (!url) return null;
-  const result = await client.query<{ id: string; sentry_type: string | null; sentry_event_id: string | null }>(
-    `SELECT id::text, sentry_type, sentry_event_id
+  const result = await client.query<{
+    id: string;
+    sentry_type: string | null;
+    sentry_event_id: string | null;
+    ingest_source: string | null;
+  }>(
+    `SELECT id::text, sentry_type, sentry_event_id, ingest_source
      FROM api_events
      WHERE occurred_at BETWEEN $1::timestamptz - interval '2 seconds'
                            AND $1::timestamptz + interval '2 seconds'
@@ -81,15 +100,26 @@ async function findNearDuplicate(
          ($3::text IS NOT NULL AND user_id = $3)
          OR ($4::text IS NOT NULL AND session_id = $4)
        )
+       AND ($5::uuid IS NULL OR project_id IS NULL OR project_id = $5)
      LIMIT 5`,
-    [occurredAt.toISOString(), url, raw.user_id ?? null, raw.session_id ?? null]
+    [
+      occurredAt.toISOString(),
+      url,
+      raw.user_id ?? null,
+      raw.session_id ?? null,
+      raw.project_id ?? null,
+    ]
   );
   const row = result.rows[0];
   if (!row) return null;
   const is_span =
     row.sentry_type === "http.client" ||
     (row.sentry_event_id ?? "").startsWith("span:");
-  return { id: row.id, is_span };
+  return { id: row.id, is_span, ingest_source: row.ingest_source ?? "direct" };
+}
+
+function isKnownService(service: string): service is ServiceName {
+  return (SERVICES as readonly string[]).includes(service);
 }
 
 export async function persistAndProcessEvent(
@@ -133,11 +163,22 @@ export async function persistAndProcessEvent(
 
     const nearDup = await findNearDuplicate(client, raw, occurredAt);
     if (nearDup) {
-      if (raw.sentry_type === "http.client") {
+      const incomingSdk = raw.ingest_source === "sdk";
+      const dupIsSentry =
+        nearDup.is_span ||
+        nearDup.ingest_source === "sentry" ||
+        (nearDup.ingest_source !== "sdk" && (raw.sentry_type === "http.client" || incomingSdk));
+      if (incomingSdk && (nearDup.is_span || nearDup.ingest_source === "sentry")) {
+        await client.query(`DELETE FROM api_events WHERE id = $1`, [nearDup.id]);
+      } else if (raw.sentry_type === "http.client") {
         await client.query("COMMIT");
         return;
-      }
-      if (nearDup.is_span) {
+      } else if (nearDup.is_span) {
+        await client.query(`DELETE FROM api_events WHERE id = $1`, [nearDup.id]);
+      } else if (incomingSdk && nearDup.ingest_source === "sdk") {
+        await client.query("COMMIT");
+        return;
+      } else if (dupIsSentry && incomingSdk) {
         await client.query(`DELETE FROM api_events WHERE id = $1`, [nearDup.id]);
       } else {
         await client.query("COMMIT");
@@ -149,8 +190,8 @@ export async function persistAndProcessEvent(
       `INSERT INTO api_events
         (service, endpoint, request_url, status_code, latency_ms, error_code, source, session_id, occurred_at, response_body, upstream_key, outcome,
          sentry_event_id, app_service, action_index, user_id, user_email, user_role, account_type, sentry_type, failure_reason, ingest_source,
-         current_screen, http_method)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+         current_screen, http_method, project_id, request_body)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
        RETURNING id::text`,
       [
         raw.service,
@@ -177,6 +218,8 @@ export async function persistAndProcessEvent(
         raw.ingest_source ?? "direct",
         raw.current_screen ?? null,
         raw.http_method ?? null,
+        raw.project_id ?? null,
+        raw.request_body ?? null,
       ]
     );
     inserted = insertResult.rows.length > 0;
@@ -187,67 +230,69 @@ export async function persistAndProcessEvent(
 
     await upsertUserSession(client, raw, occurredAt);
 
-    errorRate = await getErrorRateLast5Minutes(client, raw.service);
-    display = errorRateToDisplayStatus(errorRate);
+    if (isKnownService(raw.service)) {
+      errorRate = await getErrorRateLast5Minutes(client, raw.service);
+      display = errorRateToDisplayStatus(errorRate);
 
-    upstreamRate = await getErrorRateLast5MinutesForUpstream(
-      client,
-      raw.service,
-      raw.upstream_key
-    );
-    upstreamDisplay = errorRateToDisplayStatus(upstreamRate);
-
-    const prevRow = await client.query<{ prev_display_status: string }>(
-      `SELECT prev_display_status FROM service_health_state WHERE service = $1 FOR UPDATE`,
-      [raw.service]
-    );
-    const p = prevRow.rows[0]?.prev_display_status;
-    const prev: "operational" | "degraded" | "down" =
-      p === "degraded" || p === "down" ? p : "operational";
-
-    await client.query(
-      `UPDATE service_health_state
-       SET prev_display_status = $2, updated_at = now()
-       WHERE service = $1`,
-      [raw.service, display]
-    );
-
-    await client.query(
-      `INSERT INTO upstream_health_state (service, upstream_key, prev_display_status, updated_at)
-       VALUES ($1, $2, 'operational', now())
-       ON CONFLICT (service, upstream_key) DO NOTHING`,
-      [raw.service, raw.upstream_key]
-    );
-
-    const prevUpRow = await client.query<{ prev_display_status: string }>(
-      `SELECT prev_display_status FROM upstream_health_state
-       WHERE service = $1 AND upstream_key = $2 FOR UPDATE`,
-      [raw.service, raw.upstream_key]
-    );
-    const pu = prevUpRow.rows[0]?.prev_display_status;
-    const prevUp: "operational" | "degraded" | "down" =
-      pu === "degraded" || pu === "down" ? pu : "operational";
-
-    await client.query(
-      `UPDATE upstream_health_state
-       SET prev_display_status = $3, updated_at = now()
-       WHERE service = $1 AND upstream_key = $2`,
-      [raw.service, raw.upstream_key, upstreamDisplay]
-    );
-
-    if (upstreamDisplay !== prevUp) {
-      upstreamStatusChanged = true;
-    }
-
-    if (display !== prev) {
-      statusChanged = true;
-      incidentBroadcast = await collectIncidentSideEffects(
+      upstreamRate = await getErrorRateLast5MinutesForUpstream(
         client,
         raw.service,
-        prev,
-        display,
-        errorRate
+        raw.upstream_key
       );
+      upstreamDisplay = errorRateToDisplayStatus(upstreamRate);
+
+      const prevRow = await client.query<{ prev_display_status: string }>(
+        `SELECT prev_display_status FROM service_health_state WHERE service = $1 FOR UPDATE`,
+        [raw.service]
+      );
+      const p = prevRow.rows[0]?.prev_display_status;
+      const prev: "operational" | "degraded" | "down" =
+        p === "degraded" || p === "down" ? p : "operational";
+
+      await client.query(
+        `UPDATE service_health_state
+         SET prev_display_status = $2, updated_at = now()
+         WHERE service = $1`,
+        [raw.service, display]
+      );
+
+      await client.query(
+        `INSERT INTO upstream_health_state (service, upstream_key, prev_display_status, updated_at)
+         VALUES ($1, $2, 'operational', now())
+         ON CONFLICT (service, upstream_key) DO NOTHING`,
+        [raw.service, raw.upstream_key]
+      );
+
+      const prevUpRow = await client.query<{ prev_display_status: string }>(
+        `SELECT prev_display_status FROM upstream_health_state
+         WHERE service = $1 AND upstream_key = $2 FOR UPDATE`,
+        [raw.service, raw.upstream_key]
+      );
+      const pu = prevUpRow.rows[0]?.prev_display_status;
+      const prevUp: "operational" | "degraded" | "down" =
+        pu === "degraded" || pu === "down" ? pu : "operational";
+
+      await client.query(
+        `UPDATE upstream_health_state
+         SET prev_display_status = $3, updated_at = now()
+         WHERE service = $1 AND upstream_key = $2`,
+        [raw.service, raw.upstream_key, upstreamDisplay]
+      );
+
+      if (upstreamDisplay !== prevUp) {
+        upstreamStatusChanged = true;
+      }
+
+      if (display !== prev) {
+        statusChanged = true;
+        incidentBroadcast = await collectIncidentSideEffects(
+          client,
+          raw.service,
+          prev,
+          display,
+          errorRate
+        );
+      }
     }
 
     await client.query("COMMIT");

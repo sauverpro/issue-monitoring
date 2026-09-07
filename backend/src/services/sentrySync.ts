@@ -2,7 +2,7 @@ import type { Pool } from "pg";
 import { config } from "../config.js";
 import { SENTRY_DISCOVER_FIELDS } from "./sentry/discoverFields.js";
 import { enqueueSentryPayload, enqueuePersistEvent } from "./eventQueue.js";
-import { fetchHttpClientSpans, fetchSentryEventDetail } from "./sentry/sentryClient.js";
+import { fetchHttpClientSpans, fetchSentryEventDetail, sentryFetch, summarizeSentryBody, isTransientSentryStatus } from "./sentry/sentryClient.js";
 import {
   normalizeHttpSpan,
   normalizeSentryRow,
@@ -37,13 +37,15 @@ export async function runSentryDiscoverSync(pool: Pool): Promise<void> {
   newest = maxDate(newest, tagged.newest);
   totalAccepted += tagged.accepted;
 
-  try {
-    const spanRows = await fetchHttpClientSpans("24h");
-    const spanResult = await ingestSpanRows(pool, spanRows, lastSynced);
-    newest = maxDate(newest, spanResult.newest);
-    totalAccepted += spanResult.accepted;
-  } catch (err) {
-    console.error("[sentry-sync] span ingest failed", err);
+  if (!tagged.unavailable) {
+    try {
+      const spanRows = await fetchHttpClientSpans("24h");
+      const spanResult = await ingestSpanRows(pool, spanRows, lastSynced);
+      newest = maxDate(newest, spanResult.newest);
+      totalAccepted += spanResult.accepted;
+    } catch (err) {
+      console.warn("[sentry-sync] span ingest skipped:", describeSyncError(err));
+    }
   }
 
   if (newest) {
@@ -79,23 +81,27 @@ function maxDate(a: Date | null, b: Date | null): Date | null {
 async function pullDiscoverPages(
   startUrl: string,
   lastSynced: Date | null
-): Promise<{ newest: Date | null; accepted: number }> {
-  const { authToken } = config.sentry;
+): Promise<{ newest: Date | null; accepted: number; unavailable: boolean }> {
   let url: string | null = startUrl;
   let newest: Date | null = null;
   let accepted = 0;
 
   while (url) {
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${authToken}`,
-        Accept: "application/json",
-      },
-    });
+    let res: Response;
+    try {
+      res = await sentryFetch(url);
+    } catch (err) {
+      console.warn(`[sentry-sync] Discover skipped (${describeSyncError(err)})`);
+      return { newest, accepted, unavailable: true };
+    }
     if (!res.ok) {
       const text = await res.text();
-      console.error("[sentry-sync] Discover API error", res.status, text.slice(0, 200));
-      break;
+      const detail = summarizeSentryBody(text);
+      const waitSec = Math.round(config.sentry.syncIntervalMs / 1000);
+      console.warn(
+        `[sentry-sync] Discover skipped (${res.status} ${detail}). Next poll in ${waitSec}s.`
+      );
+      return { newest, accepted, unavailable: isTransientSentryStatus(res.status) };
     }
 
     const body = (await res.json()) as { data?: unknown[] };
@@ -119,7 +125,7 @@ async function pullDiscoverPages(
     if (hitOld) break;
   }
 
-  return { newest, accepted };
+  return { newest, accepted, unavailable: false };
 }
 
 async function ingestSpanRows(
@@ -188,8 +194,24 @@ function parseNextLink(link: string | null): string | null {
   return null;
 }
 
+function describeSyncError(err: unknown): string {
+  const cause =
+    err instanceof Error && err.cause && typeof err.cause === "object"
+      ? (err.cause as { code?: string; hostname?: string })
+      : null;
+  if (cause?.code === "ENOTFOUND" || cause?.code === "EAI_AGAIN") {
+    return `cannot resolve ${cause.hostname ?? "Sentry host"} (${cause.code}). Check DNS/VPN, or unset SENTRY_AUTH_TOKEN to disable ops Sentry sync.`;
+  }
+  if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) {
+    return "Sentry request timed out. Next poll will retry.";
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 function safeSync(pool: Pool): void {
-  runSentryDiscoverSync(pool).catch((e) => console.error("[sentry-sync] run failed", e));
+  runSentryDiscoverSync(pool).catch((e) =>
+    console.error("[sentry-sync] run failed:", describeSyncError(e))
+  );
 }
 
 export function startSentrySyncScheduler(pool: Pool): NodeJS.Timeout | null {

@@ -4,6 +4,7 @@ import {
   buildSessionSummary,
   extractFailures,
   actionOutcome,
+  isApiCall,
 } from "../src/services/sessionSummary.js";
 import {
   sortActionsByIndex,
@@ -69,6 +70,33 @@ describe("sessionSummary", () => {
   it("classifies outcomes", () => {
     assert.equal(actionOutcome(actions[0]!), "success");
     assert.equal(actionOutcome(actions[1]!), "failure");
+  });
+});
+
+describe("isApiCall", () => {
+  it("never misclassifies the new UI/behavior kinds as API calls", () => {
+    for (const actionType of ["purchase_start", "purchase_complete", "search", "form_submit"]) {
+      assert.equal(
+        isApiCall({
+          id: "x",
+          timestamp: "2026-01-01T10:00:00Z",
+          message: null,
+          type: null,
+          status: null,
+          actionType,
+          service: null,
+          method: null,
+          endpoint: null,
+          httpStatus: null,
+          actionIndex: 0,
+          orderId: null,
+          failureReason: null,
+          role: null,
+          accountType: null,
+        } as never),
+        false
+      );
+    }
   });
 });
 

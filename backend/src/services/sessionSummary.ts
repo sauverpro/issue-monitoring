@@ -13,7 +13,7 @@ const NETWORK_OTHER = new Set([
 
 export function isApiCall(action: SessionAction): boolean {
   const t = (action.actionType ?? "").toLowerCase();
-  if (t === "navigation" || t === "lifecycle" || t === "auth") return false;
+  if (t === "navigation" || t === "lifecycle" || t === "auth" || t === "click") return false;
   if (t === "api_call" || t.includes("api") || t.includes("payment")) return true;
   if (!t) {
     return Boolean(action.endpoint || action.httpStatus || action.method);

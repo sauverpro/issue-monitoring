@@ -25,7 +25,7 @@ function sessionTimelineUrl(sessionId: string): string {
 
 export function issuesRouter(pool: Pool): IRouter {
   const r = Router();
-  r.use(sentryRateLimit);
+  r.use(["/api/issues", "/issues"], sentryRateLimit);
 
   r.get(["/api/issues", "/issues"], requireJwt, async (req, res) => {
     if (!config.sentry.authToken) {

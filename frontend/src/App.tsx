@@ -18,12 +18,13 @@ import { SentrySync } from "@/pages/SentrySync";
 import { Status } from "@/pages/Status";
 import { Users } from "@/pages/Users";
 import { UptimePage } from "@/pages/monitoring/Uptime";
+import { orgRoutes } from "@/org/routes";
 
-function Protected({ children }: { children: ReactNode }) {
+function OpsProtected({ children }: { children: ReactNode }) {
   const { auth } = useAuth();
   const loc = useLocation();
   if (!auth.token) {
-    return <Navigate to="/login" replace state={{ from: loc }} />;
+    return <Navigate to="/ops/login" replace state={{ from: loc }} />;
   }
   return <Layout>{children}</Layout>;
 }
@@ -31,7 +32,7 @@ function Protected({ children }: { children: ReactNode }) {
 function RequireAdmin({ children }: { children: ReactNode }) {
   const { auth } = useAuth();
   if (auth.role !== "admin") {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/ops" replace />;
   }
   return <>{children}</>;
 }
@@ -47,120 +48,118 @@ function SessionLegacyRedirect() {
 export default function App() {
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
+      {orgRoutes}
+      <Route path="/ops/login" element={<Login />} />
       <Route path="/status" element={<Status />} />
       <Route
-        path="/"
+        path="/ops"
         element={
-          <Protected>
+          <OpsProtected>
             <Overview />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/incidents"
         element={
-          <Protected>
+          <OpsProtected>
             <Incidents />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/incidents/:id"
         element={
-          <Protected>
+          <OpsProtected>
             <IncidentDetail />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/events"
         element={
-          <Protected>
+          <OpsProtected>
             <Events />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/endpoints"
         element={
-          <Protected>
+          <OpsProtected>
             <Endpoints />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/sentry-sync"
         element={
-          <Protected>
+          <OpsProtected>
             <SentrySync />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/monitoring/issues"
         element={
-          <Protected>
+          <OpsProtected>
             <MonitoringIssues />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/monitoring/issues/:issueId"
         element={
-          <Protected>
+          <OpsProtected>
             <MonitoringIssueDetail />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/monitoring/sessions"
         element={
-          <Protected>
+          <OpsProtected>
             <MonitoringSessions />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/monitoring/sessions/:sessionId"
         element={
-          <Protected>
+          <OpsProtected>
             <MonitoringSessionDetail />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/monitoring/session-analytics"
         element={
-          <Protected>
+          <OpsProtected>
             <SessionAnalyticsPage />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/monitoring/uptime"
         element={
-          <Protected>
+          <OpsProtected>
             <UptimePage />
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route
         path="/settings/users"
         element={
-          <Protected>
+          <OpsProtected>
             <RequireAdmin>
               <Users />
             </RequireAdmin>
-          </Protected>
+          </OpsProtected>
         }
       />
       <Route path="/api-docs" element={<ApiDocs />} />
       <Route path="/sessions" element={<Navigate to="/monitoring/sessions" replace />} />
-      <Route
-        path="/sessions/:id"
-        element={<SessionLegacyRedirect />}
-      />
+      <Route path="/sessions/:id" element={<SessionLegacyRedirect />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

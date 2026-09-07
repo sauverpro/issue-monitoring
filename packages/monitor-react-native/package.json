@@ -1,0 +1,36 @@
+{
+  "name": "@koralink/monitor-react-native",
+  "version": "0.1.0",
+  "description": "Koralink Monitor SDK for React Native",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@koralink/monitor-core": "0.1.0"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.72.0"
+  },
+  "peerDependenciesMeta": {
+    "react-native": { "optional": true }
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ICT-CHAMBER/issue-monitoring.git",
+    "directory": "packages/monitor-react-native"
+  },
+  "license": "UNLICENSED"
+}

@@ -3,7 +3,10 @@
   "private": true,
   "workspaces": [
     "backend",
-    "frontend"
+    "frontend",
+    "packages/monitor-core",
+    "packages/monitor-web",
+    "packages/monitor-react-native"
   ],
   "scripts": {
     "dev:backend": "npm run dev -w backend",
@@ -11,6 +14,10 @@
     "build": "npm run build -w backend && npm run build -w frontend",
     "db:migrate": "npm run db:migrate -w backend",
     "db:seed": "npm run db:seed -w backend",
-    "db:seed:dev": "npm run db:seed:dev -w backend"
+    "db:seed:dev": "npm run db:seed:dev -w backend",
+    "db:seed:production": "npm run db:seed:production -w backend",
+    "db:assign-marketplace": "npm run db:assign-marketplace -w backend",
+    "pack:sdk": "node scripts/pack-sdks.mjs",
+    "test": "npm run test -w backend && npm run test -w @koralink/monitor-core"
   }
 }

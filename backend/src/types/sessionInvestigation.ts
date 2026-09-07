@@ -24,6 +24,9 @@ export type SessionAction = {
   screen?: string | null;
   latencyMs?: number | null;
   responseBody?: string | null;
+  requestBody?: string | null;
+  target?: string | null;
+  sessionId?: string | null;
 };
 
 export type SessionSummary = {
@@ -41,10 +44,19 @@ export type SessionActionsResponse = {
   user: SessionUser;
   summary: SessionSummary;
   actions: SessionAction[];
+  startedAt?: string | null;
+  endedAt?: string | null;
+  device?: {
+    platform: string | null;
+    os: string | null;
+    appVersion: string | null;
+    network: string | null;
+  };
 };
 
 export type SessionListItem = {
   sessionId: string;
+  userId?: string | null;
   userEmail: string | null;
   role: string | null;
   accountType: string | null;

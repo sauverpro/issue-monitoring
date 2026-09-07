@@ -38,6 +38,8 @@ End-to-end description of how telemetry flows through the monitor, how health is
 
 **Stack**: React (Vite) frontend · Express (TypeScript) backend · PostgreSQL · PM2 on VPS · optional Vercel for frontend.
 
+**Monitor (tenant projects):** apps POST `monitor.v1` envelopes to `/ingest/v1` (HTTP, no SDK required). Platform admins use the **Monitor console**; organization members use the **frontend** workspace. Full path from first key to cutover: **[docs/monitor/README.md](./monitor/README.md)**. API contract: **[docs/monitor/HTTP.md](./monitor/HTTP.md)**. That path is separate from the legacy `POST /events` + Sentry sync used by the Koralink ops dashboard (`/ops`).
+
 ---
 
 ## 1. Telemetry Ingestion

@@ -10,14 +10,21 @@ function requireEnv(name: string): string {
   return v;
 }
 
-/** Comma-separated list: dashboard + Koralink web origin if the browser POSTs /events directly. */
+/** Comma-separated list: ops dashboard, console, and instrumented web apps. */
 function parseCorsOrigins(): string | string[] {
-  const raw = process.env.CORS_ORIGIN || "http://localhost:5173";
+  const raw =
+    process.env.CORS_ORIGIN || "http://localhost:5173,http://localhost:5174";
   const list = raw
     .split(",")
-    .map((s) => s.trim())
+    .map((s) => s.trim().replace(/\/$/, ""))
     .filter(Boolean);
-  if (list.length === 0) return "http://localhost:5173";
+  if (process.env.NODE_ENV !== "production") {
+    const local = ["http://localhost:5173", "http://localhost:5174"];
+    for (const origin of local) {
+      if (!list.includes(origin)) list.push(origin);
+    }
+  }
+  if (list.length === 0) return ["http://localhost:5173", "http://localhost:5174"];
   if (list.length === 1) return list[0]!;
   return list;
 }
@@ -45,6 +52,9 @@ export const config = {
   ingestApiKey: requireEnv("INGEST_API_KEY"),
   jwtSecret: requireEnv("JWT_SECRET"),
   corsOrigin: parseCorsOrigins(),
+  publicIngestUrl: (
+    process.env.PUBLIC_INGEST_URL?.trim() || `http://localhost:${Number(process.env.PORT) || 3002}`
+  ).replace(/\/$/, ""),
   trackedApiUrls: tracked,
   retentionDays: Number(process.env.RETENTION_DAYS) || 30,
   slackWebhookUrl: process.env.SLACK_WEBHOOK_URL?.trim() || "",

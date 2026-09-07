@@ -42,7 +42,7 @@ async function actionsFromPostgres(
   const result = await pool.query(
     `SELECT sentry_event_id, occurred_at, app_service, endpoint, request_url, status_code,
             outcome, action_index, sentry_type, failure_reason, user_role, account_type,
-            latency_ms, current_screen, http_method, response_body, service
+            latency_ms, current_screen, http_method, response_body, request_body, service
      FROM api_events
      WHERE session_id = $1
      ORDER BY occurred_at ASC, COALESCE(action_index, 999999) ASC`,
@@ -83,6 +83,7 @@ async function actionsFromPostgres(
       screen: row.current_screen ?? null,
       latencyMs: row.latency_ms != null ? Number(row.latency_ms) : null,
       responseBody: row.response_body ?? null,
+      requestBody: row.request_body ?? null,
     };
   });
 

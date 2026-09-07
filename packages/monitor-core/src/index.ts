@@ -1,0 +1,32 @@
+export {
+  MonitorClient,
+  init,
+  getClient,
+  setUser,
+  setScreen,
+  setContext,
+  captureNavigation,
+  captureLifecycle,
+  captureClick,
+  captureScreenView,
+  captureFormStart,
+  captureFormSubmit,
+  captureSearch,
+  captureFilter,
+  captureModalOpen,
+  captureModalClose,
+  captureDownload,
+  captureFileUpload,
+  capturePurchaseStart,
+  capturePurchaseComplete,
+  captureLogout,
+  wrapFetch,
+} from "./client.js";
+export { hostAllowed, deriveOutcome, classifyNetworkFailure, extractHost } from "./mapping.js";
+export type {
+  MonitorInit,
+  MonitorUser,
+  MonitorContext,
+  MonitorEnvelope,
+  EnvelopeEvent,
+} from "./types.js";

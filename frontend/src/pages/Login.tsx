@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/lib/auth";
 import { Activity } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -22,7 +22,7 @@ export function Login() {
     setBusy(true);
     try {
       await login(email, password);
-      navigate(from || "/", { replace: true });
+      navigate(from || "/ops", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -38,7 +38,7 @@ export function Login() {
           <Activity className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
         </span>
         <div>
-          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Koralink Monitor</h1>
+          <h1 className="text-xl font-semibold text-zinc-900 dark:text-white">Koralink ops</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-500">API health dashboard</p>
         </div>
       </div>
@@ -92,6 +92,12 @@ export function Login() {
         >
           {busy ? "Signing in…" : "Sign in"}
         </button>
+        <p className="text-center text-xs text-zinc-500">
+          Organization workspace:{" "}
+          <Link className="font-medium text-emerald-700 dark:text-emerald-400" to="/login">
+            sign in here
+          </Link>
+        </p>
       </form>
     </div>
   );

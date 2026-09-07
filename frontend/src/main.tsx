@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 import { AuthProvider } from "./lib/auth";
+import { AuthProvider as OrgAuthProvider } from "./org/lib/auth";
 import { ThemeProvider } from "./lib/theme";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -11,7 +12,9 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <BrowserRouter>
       <ThemeProvider>
         <AuthProvider>
-          <App />
+          <OrgAuthProvider>
+            <App />
+          </OrgAuthProvider>
         </AuthProvider>
       </ThemeProvider>
     </BrowserRouter>

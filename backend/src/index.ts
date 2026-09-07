@@ -24,6 +24,13 @@ import { uptimeRouter } from "./routes/uptime.js";
 import { statusRouter } from "./routes/status.js";
 import { startRetentionScheduler } from "./services/retention.js";
 import { startSyntheticPingScheduler } from "./services/syntheticPing.js";
+import { consoleAuthRouter } from "./routes/consoleAuth.js";
+import { consoleOrgsRouter } from "./routes/consoleOrgs.js";
+import { consoleProjectsRouter } from "./routes/consoleProjects.js";
+import { consoleAdminRouter } from "./routes/consoleAdmin.js";
+import { monitorIngestRouter } from "./routes/monitorIngest.js";
+import { sdkPackagesRouter } from "./routes/sdkPackages.js";
+import { deviceOrigins } from "./services/lanHost.js";
 
 const app = express();
 
@@ -46,6 +53,8 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+app.use(sdkPackagesRouter());
+
 app.use(eventsRouter());
 app.use(authRouter(pool));
 app.use(healthRouter(pool));
@@ -62,6 +71,11 @@ app.use(sentrySyncRouter(pool));
 app.use(usersRouter(pool));
 app.use(uptimeRouter(pool));
 app.use(statusRouter(pool));
+app.use(consoleAuthRouter(pool));
+app.use(consoleOrgsRouter(pool));
+app.use(consoleProjectsRouter(pool));
+app.use(consoleAdminRouter(pool));
+app.use(monitorIngestRouter(pool));
 
 startRecoveryScheduler(pool);
 startSentrySyncScheduler(pool);
@@ -84,6 +98,12 @@ app.use(
   }
 );
 
-app.listen(config.port, () => {
-  console.log(`Koralink monitor API listening on port ${config.port}`);
+app.listen(config.port, "0.0.0.0", () => {
+  const { lanOrigin, androidEmulatorOrigin } = deviceOrigins(config.publicIngestUrl, config.port);
+  console.log(`Koralink monitor API listening on 0.0.0.0:${config.port}`);
+  console.log(`  local             ${config.publicIngestUrl}/ingest/v1`);
+  if (lanOrigin) {
+    console.log(`  phone / Expo Go   ${lanOrigin}/ingest/v1`);
+  }
+  console.log(`  Android emulator  ${androidEmulatorOrigin}/ingest/v1`);
 });

@@ -1,6 +1,22 @@
 import type { PersistEventInput } from "../types/persistEvent.js";
 
-export type JourneyKind = "navigation" | "lifecycle" | "auth";
+export type JourneyKind =
+  | "navigation"
+  | "lifecycle"
+  | "auth"
+  | "click"
+  | "screen_view"
+  | "form_start"
+  | "form_submit"
+  | "search"
+  | "filter"
+  | "modal_open"
+  | "modal_close"
+  | "download"
+  | "file_upload"
+  | "purchase_start"
+  | "purchase_complete"
+  | "logout";
 
 export type JourneyActionInput = {
   session_id: string;

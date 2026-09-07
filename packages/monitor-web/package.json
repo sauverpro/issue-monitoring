@@ -1,0 +1,30 @@
+{
+  "name": "@koralink/monitor-web",
+  "version": "0.1.0",
+  "description": "Koralink Monitor SDK for web apps (fetch + history)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@koralink/monitor-core": "0.1.0"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ICT-CHAMBER/issue-monitoring.git",
+    "directory": "packages/monitor-web"
+  },
+  "license": "UNLICENSED"
+}

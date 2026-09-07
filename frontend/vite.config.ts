@@ -19,6 +19,9 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
+      "/console": { target: "http://localhost:3000", changeOrigin: true },
+      "/ingest": { target: "http://localhost:3000", changeOrigin: true },
+      "/sdk": { target: "http://localhost:3000", changeOrigin: true },
     },
   },
 });

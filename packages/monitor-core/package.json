@@ -1,0 +1,32 @@
+{
+  "name": "@koralink/monitor-core",
+  "version": "0.1.0",
+  "description": "Koralink Monitor SDK core — queue, allowlist, envelope",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node --import tsx --test src/outcome.test.ts src/hosts.test.ts"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ICT-CHAMBER/issue-monitoring.git",
+    "directory": "packages/monitor-core"
+  },
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
