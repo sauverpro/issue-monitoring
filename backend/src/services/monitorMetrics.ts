@@ -1,4 +1,9 @@
 import type { Pool } from "pg";
+import { listProjectUpstreams } from "./tenancy.js";
+import { mergeApiStatsByUpstream } from "./monitorApiStats.js";
+
+export type { ApiStatRow } from "./monitorApiStats.js";
+export { mergeApiStatsByUpstream };
 
 export type ProjectOverview = {
   hasEvents: boolean;
@@ -55,20 +60,57 @@ export async function getProjectOverview(
 
   const by = await pool.query<{
     service: string;
+    host: string | null;
     total: string;
     failures: string;
     avg_latency: string | null;
   }>(
     `SELECT service,
+            (regexp_match(COALESCE(request_url, ''), 'https?://([^/]+)'))[1] AS host,
             COUNT(*)::text AS total,
             COUNT(*) FILTER (WHERE outcome IN ('FAILURE', 'OTHER'))::text AS failures,
             AVG(latency_ms)::text AS avg_latency
      FROM api_events
      WHERE project_id = $1 AND occurred_at >= now() - $2::interval
-     GROUP BY service
+     GROUP BY service, host
      ORDER BY COUNT(*) DESC`,
     [projectId, interval]
   );
+
+  const upstreams = await listProjectUpstreams(pool, projectId);
+  const merged = mergeApiStatsByUpstream(
+    by.rows.map((r) => ({
+      service: r.service,
+      host: r.host,
+      total: Number(r.total),
+      success: 0,
+      failure: Number(r.failures),
+      other: 0,
+      avgLatencyMs: r.avg_latency ? Math.round(Number(r.avg_latency)) : 0,
+    })),
+    upstreams
+  );
+
+  const byUpstreamMap = new Map<
+    string,
+    { service: string; total: number; failures: number; latencySum: number; latencyN: number }
+  >();
+  for (const r of merged) {
+    const cur = byUpstreamMap.get(r.service) ?? {
+      service: r.service,
+      total: 0,
+      failures: 0,
+      latencySum: 0,
+      latencyN: 0,
+    };
+    cur.total += r.total;
+    cur.failures += r.failure;
+    if (r.avgLatencyMs > 0 && r.total > 0) {
+      cur.latencySum += r.avgLatencyMs * r.total;
+      cur.latencyN += r.total;
+    }
+    byUpstreamMap.set(r.service, cur);
+  }
 
   return {
     hasEvents: apiCalls > 0 || Number(c.sessions) > 0,
@@ -79,17 +121,15 @@ export async function getProjectOverview(
     failure,
     other,
     errorRate: apiCalls === 0 ? 0 : (failure + other) / apiCalls,
-    byUpstream: by.rows.map((r) => {
-      const total = Number(r.total);
-      const failures = Number(r.failures);
-      return {
+    byUpstream: [...byUpstreamMap.values()]
+      .map((r) => ({
         service: r.service,
-        total,
-        failures,
-        errorRate: total === 0 ? 0 : failures / total,
-        avgLatencyMs: r.avg_latency ? Math.round(Number(r.avg_latency)) : 0,
-      };
-    }),
+        total: r.total,
+        failures: r.failures,
+        errorRate: r.total === 0 ? 0 : r.failures / r.total,
+        avgLatencyMs: r.latencyN > 0 ? Math.round(r.latencySum / r.latencyN) : 0,
+      }))
+      .sort((a, b) => b.total - a.total),
   };
 }
 
@@ -116,15 +156,19 @@ export async function getProjectApiStats(pool: Pool, projectId: string, days = 7
      ORDER BY COUNT(*) DESC`,
     [projectId, `${days} days`]
   );
-  return q.rows.map((r) => ({
-    service: r.service,
-    host: r.host,
-    total: Number(r.total),
-    success: Number(r.success),
-    failure: Number(r.failure),
-    other: Number(r.other),
-    avgLatencyMs: r.avg_latency ? Math.round(Number(r.avg_latency)) : 0,
-  }));
+  const upstreams = await listProjectUpstreams(pool, projectId);
+  return mergeApiStatsByUpstream(
+    q.rows.map((r) => ({
+      service: r.service,
+      host: r.host,
+      total: Number(r.total),
+      success: Number(r.success),
+      failure: Number(r.failure),
+      other: Number(r.other),
+      avgLatencyMs: r.avg_latency ? Math.round(Number(r.avg_latency)) : 0,
+    })),
+    upstreams
+  );
 }
 
 export async function listOrgUsage(pool: Pool) {

@@ -1,4 +1,5 @@
 import type { PersistEventInput } from "../types/persistEvent.js";
+import { deriveScreenFromMessage } from "./monitorScreenLabel.js";
 
 export type JourneyKind =
   | "navigation"
@@ -167,10 +168,14 @@ export function journeyActionsFromBreadcrumbs(
       dataStr(data, "toScreen") ||
       dataStr(data, "screenName") ||
       dataStr(data, "current_screen") ||
+      dataStr(data, "to") ||
+      dataStr(data, "name") ||
+      deriveScreenFromMessage(b.message) ||
       undefined;
     const fromScreen =
       dataStr(data, "fromScreen") ||
       dataStr(data, "previousScreen") ||
+      dataStr(data, "from") ||
       undefined;
 
     actions.push({

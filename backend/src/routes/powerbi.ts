@@ -163,7 +163,7 @@ export function powerbiRouter(pool: Pool): IRouter {
    */
   r.get(["/api/powerbi/events", "/powerbi/events"], async (req, res) => {
     try {
-      const limit = Math.min(Math.max(1, Number(req.query.limit) || 500), 5000);
+      const limit = Math.min(Math.max(1, Number(req.query.limit) || 500), 1000000);
       const offset = Math.max(0, Number(req.query.offset) || 0);
 
       const conditions: string[] = [];

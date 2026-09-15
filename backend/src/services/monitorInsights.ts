@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import type { DateRange } from "./monitorJourney.js";
 import { getReportFunnels, previousRange, pctDelta } from "./monitorReports.js";
+import { NAV_KIND_SQL, navKindSql, pickFunnelStart, screenLabelSql } from "./monitorScreenLabel.js";
 
 const USER_KEY_SQL = `COALESCE(NULLIF(TRIM(user_id), ''), NULLIF(TRIM(user_email), ''))`;
 
@@ -651,14 +652,15 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
     getReportFunnels(pool, projectId, range),
   ]);
 
+  const startStep = pickFunnelStart(funnels.steps);
   const start =
-    funnels.steps[0] ??
+    startStep ??
     (funnels.transitions[0]
       ? { screen: funnels.transitions[0].from, sessions: funnels.transitions[0].count }
       : undefined);
   const funnel = sequentialFunnel(
     start ? { screen: start.screen, sessions: start.sessions } : undefined,
-    funnels.transitions
+    funnels.transitions.filter((t) => !/^\(?\s*unknown\s*\)?$/i.test(t.to))
   );
 
   const healthStatus =
@@ -823,14 +825,16 @@ export async function getProjectPerformance(pool: Pool, projectId: string, range
 }
 
 export async function getReportBehavior(pool: Pool, projectId: string, range: DateRange) {
+  const labelA = screenLabelSql("a");
+  const label = screenLabelSql();
   const screens = await pool.query<{ screen: string; views: string; users: string }>(
-    `SELECT COALESCE(NULLIF(a.screen, ''), a.from_screen, '(unknown)') AS screen,
+    `SELECT ${labelA} AS screen,
             COUNT(*)::text AS views,
             COUNT(DISTINCT COALESCE(NULLIF(TRIM(s.user_id), ''), NULLIF(TRIM(s.user_email), ''), a.session_id))::text AS users
      FROM session_actions a
      LEFT JOIN user_sessions s
        ON s.session_id = a.session_id AND s.project_id = a.project_id
-     WHERE a.project_id = $1 AND a.kind = 'navigation'
+     WHERE a.project_id = $1 AND ${navKindSql("a")}
        AND a.occurred_at >= $2 AND a.occurred_at <= $3
      GROUP BY 1
      ORDER BY COUNT(*) DESC
@@ -839,9 +843,9 @@ export async function getReportBehavior(pool: Pool, projectId: string, range: Da
   );
 
   const nav = await pool.query<{ session_id: string; screen: string }>(
-    `SELECT session_id, COALESCE(NULLIF(screen, ''), '(unknown)') AS screen
+    `SELECT session_id, ${label} AS screen
      FROM session_actions
-     WHERE project_id = $1 AND kind = 'navigation'
+     WHERE project_id = $1 AND ${NAV_KIND_SQL}
        AND occurred_at >= $2 AND occurred_at <= $3
      ORDER BY session_id, occurred_at
      LIMIT 20000`,
@@ -869,7 +873,7 @@ export async function getReportBehavior(pool: Pool, projectId: string, range: Da
 
 export async function getFunnelReport(pool: Pool, projectId: string, range: DateRange) {
   const funnels = await getReportFunnels(pool, projectId, range);
-  const start = funnels.steps[0];
+  const start = pickFunnelStart(funnels.steps);
   const steps = sequentialFunnel(
     start ? { screen: start.screen, sessions: start.sessions } : undefined,
     funnels.transitions

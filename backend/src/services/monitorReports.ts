@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import { parseDateRange, type DateRange } from "./monitorJourney.js";
+import { NAV_KIND_SQL, screenLabelSql } from "./monitorScreenLabel.js";
 
 const USER_KEY_SQL = `COALESCE(NULLIF(TRIM(user_id), ''), NULLIF(TRIM(user_email), ''))`;
 
@@ -158,10 +159,10 @@ export async function getReportOverview(pool: Pool, projectId: string, range: Da
         [projectId, range.from, range.to]
       ),
       pool.query<{ screen: string; n: string }>(
-        `SELECT COALESCE(NULLIF(screen, ''), from_screen, '(unknown)') AS screen,
+        `SELECT ${screenLabelSql()} AS screen,
                 COUNT(*)::text AS n
          FROM session_actions
-         WHERE project_id = $1 AND kind = 'navigation' AND occurred_at >= $2 AND occurred_at <= $3
+         WHERE project_id = $1 AND ${NAV_KIND_SQL} AND occurred_at >= $2 AND occurred_at <= $3
          GROUP BY 1
          ORDER BY COUNT(*) DESC
          LIMIT 8`,
@@ -323,12 +324,13 @@ export async function getReportOverview(pool: Pool, projectId: string, range: Da
 }
 
 export async function getReportFunnels(pool: Pool, projectId: string, range: DateRange) {
+  const label = screenLabelSql();
   const [entry, transitions, screens] = await Promise.all([
     pool.query<{ screen: string; n: string }>(
-      `SELECT COALESCE(NULLIF(screen, ''), '(unknown)') AS screen,
+      `SELECT ${label} AS screen,
               COUNT(DISTINCT session_id)::text AS n
        FROM session_actions
-       WHERE project_id = $1 AND kind = 'navigation'
+       WHERE project_id = $1 AND ${NAV_KIND_SQL}
          AND occurred_at >= $2 AND occurred_at <= $3
          AND (from_screen IS NULL OR TRIM(from_screen) = '')
        GROUP BY 1
@@ -337,11 +339,11 @@ export async function getReportFunnels(pool: Pool, projectId: string, range: Dat
       [projectId, range.from, range.to]
     ),
     pool.query<{ from_screen: string; screen: string; n: string }>(
-      `SELECT COALESCE(NULLIF(from_screen, ''), '(start)') AS from_screen,
-              COALESCE(NULLIF(screen, ''), '(unknown)') AS screen,
+      `SELECT COALESCE(NULLIF(TRIM(from_screen), ''), '(start)') AS from_screen,
+              ${label} AS screen,
               COUNT(*)::text AS n
        FROM session_actions
-       WHERE project_id = $1 AND kind = 'navigation'
+       WHERE project_id = $1 AND ${NAV_KIND_SQL}
          AND occurred_at >= $2 AND occurred_at <= $3
          AND from_screen IS NOT NULL AND TRIM(from_screen) <> ''
        GROUP BY 1, 2
@@ -350,10 +352,10 @@ export async function getReportFunnels(pool: Pool, projectId: string, range: Dat
       [projectId, range.from, range.to]
     ),
     pool.query<{ screen: string; n: string }>(
-      `SELECT COALESCE(NULLIF(screen, ''), '(unknown)') AS screen,
+      `SELECT ${label} AS screen,
               COUNT(DISTINCT session_id)::text AS n
        FROM session_actions
-       WHERE project_id = $1 AND kind = 'navigation'
+       WHERE project_id = $1 AND ${NAV_KIND_SQL}
          AND occurred_at >= $2 AND occurred_at <= $3
        GROUP BY 1
        ORDER BY COUNT(DISTINCT session_id) DESC
@@ -368,20 +370,24 @@ export async function getReportFunnels(pool: Pool, projectId: string, range: Dat
     [projectId, range.from, range.to]
   );
   const sessions = Number(totalSessions.rows[0]?.n ?? 0) || 1;
-  const start = Number(entry.rows[0]?.n ?? screens.rows[0]?.n ?? 0) || sessions;
+  const namedEntry = entry.rows.filter((r) => !/^\(?\s*unknown\s*\)?$/i.test(r.screen));
+  const entryRows = namedEntry.length > 0 ? namedEntry : entry.rows;
+  const start = Number(entryRows[0]?.n ?? screens.rows[0]?.n ?? 0) || sessions;
 
   const steps =
-    entry.rows.length > 0
-      ? entry.rows.map((r) => ({
+    entryRows.length > 0
+      ? entryRows.map((r) => ({
           screen: r.screen,
           sessions: Number(r.n),
           conversion: Number(r.n) / start,
         }))
-      : screens.rows.map((r) => ({
-          screen: r.screen,
-          sessions: Number(r.n),
-          conversion: Number(r.n) / sessions,
-        }));
+      : screens.rows
+          .filter((r) => !/^\(?\s*unknown\s*\)?$/i.test(r.screen))
+          .map((r) => ({
+            screen: r.screen,
+            sessions: Number(r.n),
+            conversion: Number(r.n) / sessions,
+          }));
 
   return {
     steps,
