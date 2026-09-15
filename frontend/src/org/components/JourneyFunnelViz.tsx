@@ -24,20 +24,20 @@ export function JourneyFunnelViz({ steps }: { steps: FunnelStep[] }) {
             )}
           </div>
         ))}
-        <p className="mt-2 text-lg text-zinc-300">✕</p>
+        {steps.length > 1 && <p className="mt-2 text-lg text-zinc-300">✕</p>}
       </div>
     </div>
   );
 }
 
 export function InlineFunnel({ steps }: { steps: FunnelStep[] }) {
-  if (steps.length < 2) return null;
+  if (steps.length === 0) return null;
   return (
     <div className="space-y-2">
       {steps.slice(0, 5).map((s, i) => (
-        <div key={s.screen} className="flex items-center gap-2 text-sm">
+        <div key={`${s.screen}-${i}`} className="flex items-center gap-2 text-sm">
           <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300">{s.screen}</span>
-          {i < steps.length - 1 && (
+          {i < Math.min(steps.length, 5) - 1 && (
             <span className="text-xs text-zinc-400">
               → {(steps[i + 1]!.conversion * 100).toFixed(1)}%
             </span>

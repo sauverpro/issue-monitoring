@@ -98,17 +98,22 @@ export function BarChart({
   color?: string;
 }) {
   const max = Math.max(1, ...values);
+  const chartH = 160; // matches h-40
   return (
     <div>
       <div className="flex h-40 items-end gap-1.5">
-        {values.map((v, i) => (
-          <div key={labels[i] ?? i} className="flex flex-1 flex-col items-center justify-end" title={`${labels[i]} · ${v}`}>
+        {values.map((v, i) => {
+          const px = v <= 0 ? 0 : Math.max(3, Math.round((v / max) * chartH));
+          return (
             <div
-              className="w-full rounded-t"
-              style={{ height: `${Math.max(4, (v / max) * 100)}%`, background: color }}
-            />
-          </div>
-        ))}
+              key={labels[i] ?? i}
+              className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
+              title={`${labels[i]} · ${v.toLocaleString()}`}
+            >
+              <div className="w-full rounded-t" style={{ height: `${px}px`, background: color }} />
+            </div>
+          );
+        })}
       </div>
       <div className="mt-2 flex gap-1.5 text-[10px] text-zinc-400">
         {labels.map((l, i) => (
