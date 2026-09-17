@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { apiFetch } from "@/org/lib/api";
-import type { FunnelStep, SessionAction } from "@/org/types";
+import type { ApiClassCounts, FunnelStep, SessionAction } from "@/org/types";
 import {
   encodeUserKey,
   formatClockHm,
@@ -11,6 +11,7 @@ import {
 import { ApiDetailDrawer } from "@/org/components/ApiDetailDrawer";
 import { JourneyFunnelViz } from "@/org/components/JourneyFunnelViz";
 import { JourneyTimeline } from "@/org/components/JourneyTimeline";
+import { ApiClassSummary } from "@/org/components/monitor";
 import { PageHeader, StatCard } from "@/org/components/ui";
 
 type Detail = {
@@ -62,6 +63,18 @@ export function SessionDetailPage() {
     [data]
   );
 
+  const apiOutcomes = useMemo((): ApiClassCounts => {
+    const o: ApiClassCounts = { success: 0, clientFailure: 0, serverError: 0, network: 0 };
+    for (const a of chronological) {
+      if (!a.resultClass) continue;
+      if (a.resultClass === "success") o.success += 1;
+      else if (a.resultClass === "client_failure") o.clientFailure += 1;
+      else if (a.resultClass === "server_error") o.serverError += 1;
+      else if (a.resultClass === "network") o.network += 1;
+    }
+    return o;
+  }, [chronological]);
+
   if (error) return <p className="text-red-600">{error}</p>;
   if (!data) return <p className="text-zinc-500">Loading…</p>;
 
@@ -97,7 +110,7 @@ export function SessionDetailPage() {
         <StatCard
           label="API calls"
           value={data.summary.apiCalls}
-          hint={`${data.summary.failedActions} errors`}
+          hint={<ApiClassSummary outcomes={apiOutcomes} fallback={data.summary.failedActions} />}
         />
       </div>
 

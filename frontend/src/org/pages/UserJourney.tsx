@@ -19,6 +19,7 @@ import { ApiDetailDrawer } from "@/org/components/ApiDetailDrawer";
 import { JourneyTimeline } from "@/org/components/JourneyTimeline";
 import { JourneyFunnelViz } from "@/org/components/JourneyFunnelViz";
 import { EmptyState, Panel, StatCard } from "@/org/components/ui";
+import { ApiClassSummary, problemCount } from "@/org/components/monitor";
 
 type TimelinePayload = {
   actions: SessionAction[];
@@ -31,6 +32,12 @@ type SessionRow = {
   durationMs: number;
   actions: number;
   errors: number;
+  apiOutcomes?: {
+    success: number;
+    clientFailure: number;
+    serverError: number;
+    network: number;
+  };
 };
 
 type DaysPayload = {
@@ -110,7 +117,7 @@ export function UserJourneyPage() {
       .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
     const current = params.get("session");
     if (current && sessions.some((s) => s.sessionId === current)) return;
-    const withErr = sessions.find((s) => s.errors > 0);
+    const withErr = sessions.find((s) => (s.apiOutcomes ? problemCount(s.apiOutcomes) : s.errors) > 0);
     const pick = withErr ?? sessions[0];
     const next = new URLSearchParams();
     next.set("date", selectedDay);
@@ -129,7 +136,12 @@ export function UserJourneyPage() {
         setTimeline(data);
         const fail = data.actions.find((a) => {
           const k = classifyKind(a);
-          return k === "api_failure" || k === "error" || a.status === "failure";
+          return (
+            k === "api_failure" ||
+            k === "error" ||
+            a.status === "failure" ||
+            (a.resultClass != null && a.resultClass !== "success")
+          );
         });
         if (fail) {
           requestAnimationFrame(() => {
@@ -203,9 +215,15 @@ export function UserJourneyPage() {
         <StatCard label="Sessions" value={profile.sessions} />
         <StatCard label="Actions" value={profile.actions} />
         <StatCard
-          label="Errors"
-          value={profile.errors}
-          hint={profile.errors > 0 ? "🔴" : undefined}
+          label="Problems"
+          value={problemCount(profile.apiOutcomes) || profile.errors}
+          hint={
+            profile.apiOutcomes ? (
+              <ApiClassSummary outcomes={profile.apiOutcomes} fallback={profile.errors} />
+            ) : profile.errors > 0 ? (
+              "🔴"
+            ) : undefined
+          }
         />
         <StatCard label="Time spent" value={formatDuration(profile.durationMs)} />
       </div>
@@ -236,6 +254,7 @@ export function UserJourneyPage() {
         <ul className="mb-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {daySessions.map((s) => {
             const active = s.sessionId === selectedSessionId;
+            const problems = s.apiOutcomes ? problemCount(s.apiOutcomes) : s.errors;
             return (
               <li key={s.sessionId}>
                 <button
@@ -245,7 +264,7 @@ export function UserJourneyPage() {
                     "w-full rounded-2xl border px-4 py-4 text-left transition",
                     active
                       ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500/30 dark:border-indigo-400 dark:bg-indigo-500/15"
-                      : s.errors > 0
+                      : problems > 0
                         ? "border-red-200 bg-white hover:border-red-300 dark:border-red-500/30 dark:bg-zinc-900/60"
                         : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60"
                   )}
@@ -256,11 +275,13 @@ export function UserJourneyPage() {
                   <p className="mt-1 text-sm text-zinc-500">
                     {formatDuration(s.durationMs)} · {s.actions} actions
                   </p>
-                  {s.errors > 0 ? (
-                    <p className="mt-2 text-sm font-medium text-red-600">🔴 {s.errors} errors</p>
-                  ) : (
-                    <p className="mt-2 text-sm text-zinc-400">No API errors</p>
-                  )}
+                  <div className="mt-2">
+                    {problems > 0 ? (
+                      <ApiClassSummary outcomes={s.apiOutcomes} fallback={s.errors} />
+                    ) : (
+                      <p className="text-sm text-zinc-400">No API problems</p>
+                    )}
+                  </div>
                 </button>
               </li>
             );

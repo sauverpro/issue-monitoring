@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { clsx } from "clsx";
 import { Delta, healthLabel } from "@/org/lib/metrics";
-import type { ProblemSeverity } from "@/org/types";
+import type { ApiClassCounts, ProblemSeverity } from "@/org/types";
 
 export function SeverityBadge({ severity }: { severity: ProblemSeverity | string }) {
   const map: Record<string, { icon: string; label: string; className: string }> = {
@@ -48,6 +48,44 @@ export function ResultClassBadge({
       {s.label}
     </span>
   );
+}
+
+/** Compact breakdown of classified API outcomes for tables / list rows. */
+export function ApiClassSummary({
+  outcomes,
+  fallback = 0,
+}: {
+  outcomes?: ApiClassCounts | null;
+  /** Legacy problem count when outcomes are missing. */
+  fallback?: number;
+}) {
+  const o = outcomes ?? { success: 0, clientFailure: 0, serverError: 0, network: 0 };
+  const problems = o.clientFailure + o.serverError + o.network;
+  if (problems === 0 && fallback === 0) {
+    return <span className="tabular-nums text-zinc-400">0</span>;
+  }
+  if (problems === 0 && fallback > 0) {
+    return <span className="font-medium tabular-nums text-red-600">{fallback}</span>;
+  }
+  const parts = [
+    { key: "server", n: o.serverError, className: "text-red-600 dark:text-red-400", label: "5xx" },
+    { key: "client", n: o.clientFailure, className: "text-amber-700 dark:text-amber-400", label: "4xx" },
+    { key: "net", n: o.network, className: "text-zinc-600 dark:text-zinc-300", label: "net" },
+  ].filter((p) => p.n > 0);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1.5">
+      {parts.map((p) => (
+        <span key={p.key} className={clsx("text-xs font-medium tabular-nums", p.className)}>
+          {p.n} {p.label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+export function problemCount(o?: ApiClassCounts | null): number {
+  if (!o) return 0;
+  return o.clientFailure + o.serverError + o.network;
 }
 
 export function ImpactBar({ score, label }: { score: number; label: string }) {

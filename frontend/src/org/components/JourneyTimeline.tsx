@@ -9,6 +9,7 @@ import {
   pathOnly,
   statusPhrase,
 } from "@/org/lib/journey";
+import { ResultClassBadge } from "@/org/components/monitor";
 
 const ACTION_LABEL: Record<string, string> = {
   click: "CLICK",
@@ -29,6 +30,11 @@ type TreeNode =
   | { type: "screen"; label: string }
   | { type: "api"; action: SessionAction; failed: boolean }
   | { type: "click"; action: SessionAction };
+
+function isFailedApi(a: SessionAction): boolean {
+  if (a.resultClass) return a.resultClass !== "success";
+  return a.status === "failure";
+}
 
 function buildTree(actions: SessionAction[]): TreeNode[] {
   const sorted = [...actions].sort((a, b) => {
@@ -55,7 +61,7 @@ function buildTree(actions: SessionAction[]): TreeNode[] {
       nodes.push({
         type: "api",
         action: a,
-        failed: kind === "api_failure" || kind === "error" || a.status === "failure",
+        failed: kind === "api_failure" || kind === "error" || isFailedApi(a),
       });
     }
   }
@@ -65,6 +71,14 @@ function buildTree(actions: SessionAction[]): TreeNode[] {
     nodes.push({ type: "marker", time: last.timestamp, label: "SESSION END" });
   }
   return nodes;
+}
+
+function resultTone(resultClass?: string | null, failed?: boolean): string {
+  if (resultClass === "server_error") return "text-red-600 dark:text-red-400";
+  if (resultClass === "client_failure") return "text-amber-700 dark:text-amber-400";
+  if (resultClass === "network") return "text-zinc-600 dark:text-zinc-300";
+  if (resultClass === "success") return "text-emerald-700 dark:text-emerald-400";
+  return failed ? "text-red-600 dark:text-red-400" : "";
 }
 
 export function JourneyTimeline({
@@ -122,13 +136,20 @@ export function JourneyTimeline({
         const a = node.action;
         const status = statusPhrase(a.httpStatus) || (node.failed ? "Failed" : "OK");
         const latency = formatLatency(a.latencyMs);
+        const border =
+          a.resultClass === "server_error"
+            ? "border-red-300"
+            : a.resultClass === "client_failure"
+              ? "border-amber-300"
+              : a.resultClass === "network"
+                ? "border-zinc-400"
+                : node.failed
+                  ? "border-red-300"
+                  : "border-zinc-200";
         return (
           <div
             key={`a-${a.id}`}
-            className={clsx(
-              "ml-16 mb-1 border-l pl-4 dark:border-zinc-700",
-              node.failed ? "border-red-300" : "border-zinc-200"
-            )}
+            className={clsx("ml-16 mb-1 border-l pl-4 dark:border-zinc-700", border)}
           >
             {!markerTime && (
               <p className="text-zinc-500">{formatClock(a.timestamp)}</p>
@@ -144,10 +165,10 @@ export function JourneyTimeline({
               <p className="font-medium">
                 ├── {a.method || "GET"} {pathOnly(a.endpoint)}
               </p>
-              <p className={clsx("pl-6", node.failed && "text-red-600 dark:text-red-400")}>
-                └── {node.failed ? "🔴 " : ""}
-                {status}
+              <p className={clsx("flex flex-wrap items-center gap-2 pl-6", resultTone(a.resultClass, node.failed))}>
+                └── {status}
                 {latency ? `   ${latency}` : ""}
+                {a.resultClass && <ResultClassBadge resultClass={a.resultClass} />}
               </p>
             </button>
           </div>

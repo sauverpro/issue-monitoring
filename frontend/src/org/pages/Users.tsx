@@ -5,8 +5,9 @@ import { apiFetch } from "@/org/lib/api";
 import { useRange } from "@/org/lib/range";
 import { Delta } from "@/org/lib/metrics";
 import { encodeUserKey, relativeTime } from "@/org/lib/journey";
-import type { JourneyUser } from "@/org/types";
 import { EmptyState, PageHeader, Panel, StatCard } from "@/org/components/ui";
+import { ApiClassSummary } from "@/org/components/monitor";
+import type { JourneyUser } from "@/org/types";
 
 type DashboardKpis = {
   kpis: { users: number; sessions: number; usersDelta: number | null; sessionsDelta: number | null };
@@ -100,7 +101,7 @@ export function UsersPage() {
               <th className="px-5 py-2">Last active</th>
               <th className="px-5 py-2">Sessions</th>
               <th className="px-5 py-2">Actions</th>
-              <th className="px-5 py-2">Errors</th>
+              <th className="px-5 py-2">Outcomes</th>
             </tr>
           </thead>
           <tbody>
@@ -130,12 +131,8 @@ export function UsersPage() {
                   <td className="px-5 py-3 text-zinc-500">{relativeTime(u.lastActive)}</td>
                   <td className="px-5 py-3 tabular-nums">{u.sessions}</td>
                   <td className="px-5 py-3 tabular-nums">{u.actions}</td>
-                  <td className="px-5 py-3 tabular-nums">
-                    {u.errors > 0 ? (
-                      <span className="font-medium text-red-600">{u.errors} 🔴</span>
-                    ) : (
-                      0
-                    )}
+                  <td className="px-5 py-3">
+                    <ApiClassSummary outcomes={u.apiOutcomes} fallback={u.errors} />
                   </td>
                 </tr>
               );

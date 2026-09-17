@@ -168,7 +168,10 @@ export function classifyKind(a: SessionAction): TimelineKind {
     return "lifecycle";
   }
   const isApi = t === "api_call" || t.includes("api") || Boolean(a.method || a.httpStatus);
-  if (isApi) return a.status === "failure" ? "api_failure" : "api";
+  if (isApi) {
+    if (a.resultClass && a.resultClass !== "success") return "api_failure";
+    return a.status === "failure" ? "api_failure" : "api";
+  }
   return "other";
 }
 
@@ -250,10 +253,12 @@ export function buildJourneyMap(actions: SessionAction[]): JourneyMapNode[] {
     }
     if (isApiAction(a) && current) {
       current.apiTotal += 1;
-      if (a.status === "failure") {
+      const ok = a.resultClass ? a.resultClass === "success" : a.status === "success";
+      const fail = a.resultClass ? a.resultClass !== "success" : a.status === "failure";
+      if (fail) {
         current.apiFail += 1;
         current.failed = true;
-      } else if (a.status === "success") {
+      } else if (ok) {
         current.apiOk += 1;
       }
     }

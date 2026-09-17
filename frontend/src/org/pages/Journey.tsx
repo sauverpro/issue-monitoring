@@ -3,11 +3,18 @@ import { Link, useParams } from "react-router-dom";
 import { UserRound } from "lucide-react";
 import { apiFetch } from "@/org/lib/api";
 import { dayBounds, encodeUserKey, formatDuration, localISODate, relativeTime } from "@/org/lib/journey";
-import type { JourneyUser } from "@/org/types";
+import type { ApiClassCounts, JourneyUser } from "@/org/types";
 import { EmptyState, PageHeader, Panel, StatCard } from "@/org/components/ui";
+import { ApiClassSummary } from "@/org/components/monitor";
 
 type Home = {
-  stats: { activeUsers: number; sessions: number; apiErrors: number; avgLatencyMs: number };
+  stats: {
+    activeUsers: number;
+    sessions: number;
+    apiErrors: number;
+    avgLatencyMs: number;
+    apiOutcomes?: ApiClassCounts;
+  };
   users: JourneyUser[];
 };
 
@@ -50,6 +57,8 @@ export function JourneyPage() {
   if (error) return <p className="text-red-600">{error}</p>;
   if (!data) return <p className="text-zinc-500">Loading…</p>;
 
+  const outcomes = data.stats.apiOutcomes;
+
   return (
     <div>
       <PageHeader
@@ -82,7 +91,11 @@ export function JourneyPage() {
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Active users" value={data.stats.activeUsers.toLocaleString()} />
           <StatCard label="Sessions" value={data.stats.sessions.toLocaleString()} />
-          <StatCard label="API errors" value={data.stats.apiErrors.toLocaleString()} />
+          <StatCard
+            label="API problems"
+            value={data.stats.apiErrors.toLocaleString()}
+            hint={<ApiClassSummary outcomes={outcomes} fallback={data.stats.apiErrors} />}
+          />
           <StatCard label="Avg latency" value={`${data.stats.avgLatencyMs}ms`} />
         </div>
       )}
@@ -114,9 +127,7 @@ export function JourneyPage() {
                         {relativeTime(u.lastActive)} · {u.actions} actions · {formatDuration(u.durationMs)}
                       </p>
                     </div>
-                    {u.errors > 0 && (
-                      <span className="text-xs font-medium text-red-600">🔴 {u.errors} errors</span>
-                    )}
+                    <ApiClassSummary outcomes={u.apiOutcomes} fallback={u.errors} />
                   </Link>
                 </li>
               );

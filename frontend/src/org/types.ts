@@ -19,12 +19,23 @@ export type ProjectListItem = {
   hostCount: number;
 };
 
+export type HttpResultClass = "success" | "client_failure" | "server_error" | "network";
+
+export type ApiClassCounts = {
+  success: number;
+  clientFailure: number;
+  serverError: number;
+  network: number;
+};
+
 export type SessionAction = {
   id: string;
   timestamp: string;
   message: string | null;
   type: string | null;
   status: string | null;
+  /** HTTP result class for API calls. */
+  resultClass?: HttpResultClass | null;
   actionType: string | null;
   service: string | null;
   method: string | null;
@@ -50,6 +61,7 @@ export type SessionListItem = {
   failures: number;
   startedAt: string;
   lastActivity: string;
+  apiOutcomes?: ApiClassCounts;
 };
 
 export type JourneyUser = {
@@ -61,6 +73,7 @@ export type JourneyUser = {
   actions: number;
   errors: number;
   durationMs: number;
+  apiOutcomes?: ApiClassCounts;
 };
 
 export type JourneyMapNode = {
@@ -87,8 +100,6 @@ export type FunnelStep = {
 };
 
 export type ProblemSeverity = "critical" | "high" | "medium" | "low";
-
-export type HttpResultClass = "success" | "client_failure" | "server_error" | "network";
 
 export type ProblemRow = {
   severity: ProblemSeverity;

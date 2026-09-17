@@ -9,16 +9,19 @@ import { ImpactBar, ResultClassBadge, SeverityBadge } from "@/org/components/mon
 import { LineChart, Sparkline } from "@/org/components/charts";
 import { EmptyState, PageHeader, Panel } from "@/org/components/ui";
 
+type AffectedUser = {
+  userKey: string;
+  userId: string | null;
+  email: string | null;
+  errors: number;
+  sessions: number;
+  lastSeen: string;
+  sampleSessionId?: string | null;
+};
+
 type Detail = ProblemRow & {
   trend: { date: string; count: number }[];
-  users: {
-    userKey: string;
-    userId: string | null;
-    email: string | null;
-    errors: number;
-    sessions: number;
-    lastSeen: string;
-  }[];
+  users: AffectedUser[];
   p50Ms: number;
   p95Ms: number;
   p99Ms: number;
@@ -32,7 +35,8 @@ export function ProblemDetailPage() {
 
   useEffect(() => {
     if (!projectId || !key) return;
-    apiFetch<Detail>(`/console/projects/${projectId}/problems/${key}?${range.query}`)
+    // key is already a base64url path segment — do not decode before sending
+    apiFetch<Detail>(`/console/projects/${projectId}/problems/${encodeURIComponent(key)}?${range.query}`)
       .then(setData)
       .catch((e) => setError(e instanceof Error ? e.message : "Failed"));
   }, [projectId, key, range.query]);
@@ -111,7 +115,10 @@ export function ProblemDetailPage() {
       <Panel>
         <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
           <span className="text-sm font-medium">Affected users</span>
-          <Link className="text-xs text-indigo-600 dark:text-indigo-400" to={`${base}/problems/${key}/users`}>
+          <Link
+            className="text-xs text-indigo-600 dark:text-indigo-400"
+            to={`${base}/problems/${encodeURIComponent(key ?? "")}/users`}
+          >
             View all →
           </Link>
         </div>
@@ -121,33 +128,61 @@ export function ProblemDetailPage() {
           <table className="w-full text-left text-sm">
             <thead className="table-head">
               <tr>
-                <th className="px-5 py-2">User</th>
+                <th className="px-5 py-2">Email</th>
                 <th className="px-5 py-2">Errors</th>
                 <th className="px-5 py-2">Last seen</th>
+                <th className="px-5 py-2" />
               </tr>
             </thead>
             <tbody>
-              {data.users.map((u) => {
-                const userKeyVal = encodeUserKey(u.userId, u.email ?? u.userKey);
-                return (
-                  <tr key={u.userKey} className="border-b border-zinc-100 dark:border-zinc-800">
-                    <td className="px-5 py-3">
-                      <Link className="text-indigo-600 hover:underline dark:text-indigo-400" to={`${base}/users/${userKeyVal}`}>
-                        {u.email || u.userId || u.userKey}
-                      </Link>
-                    </td>
-                    <td className="px-5 py-3 tabular-nums">{u.errors}</td>
-                    <td className="px-5 py-3 text-zinc-500">
-                      {new Date(u.lastSeen).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-                    </td>
-                  </tr>
-                );
-              })}
+              {data.users.map((u) => (
+                <AffectedUserRow key={u.userKey} user={u} base={base} />
+              ))}
             </tbody>
           </table>
         )}
       </Panel>
     </div>
+  );
+}
+
+function AffectedUserRow({ user: u, base }: { user: AffectedUser; base: string }) {
+  const userKeyVal = encodeUserKey(u.userId, u.email ?? u.userKey);
+  const email = u.email || null;
+  const sessionHref = u.sampleSessionId
+    ? `${base}/sessions/${encodeURIComponent(u.sampleSessionId)}`
+    : null;
+  const journeyHref = `${base}/users/${userKeyVal}`;
+
+  return (
+    <tr className="border-b border-zinc-100 dark:border-zinc-800">
+      <td className="px-5 py-3">
+        <Link className="font-medium text-indigo-600 hover:underline dark:text-indigo-400" to={journeyHref}>
+          {email || u.userId || u.userKey || "Unknown user"}
+        </Link>
+        {email && u.userId && (
+          <span className="mt-0.5 block font-mono text-[11px] text-zinc-400">id {u.userId}</span>
+        )}
+        {!email && u.userId && (
+          <span className="mt-0.5 block text-[11px] text-zinc-400">No email on ingest</span>
+        )}
+      </td>
+      <td className="px-5 py-3 tabular-nums">{u.errors}</td>
+      <td className="px-5 py-3 text-zinc-500">
+        {new Date(u.lastSeen).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
+      </td>
+      <td className="px-5 py-3 text-right">
+        {sessionHref ? (
+          <Link className="btn-secondary whitespace-nowrap text-xs" to={sessionHref}>
+            View session →
+          </Link>
+        ) : (
+          <Link className="btn-secondary whitespace-nowrap text-xs" to={journeyHref}>
+            View journey →
+          </Link>
+        )}
+      </td>
+    </tr>
   );
 }
 
@@ -164,7 +199,7 @@ export function ProblemUsersPage() {
   const { orgId, projectId, problemKey: key } = useParams();
   const { range } = useRange();
   const [search, setSearch] = useState("");
-  const [users, setUsers] = useState<Detail["users"]>([]);
+  const [users, setUsers] = useState<AffectedUser[]>([]);
   const [meta, setMeta] = useState<{ method: string; path: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -172,9 +207,10 @@ export function ProblemUsersPage() {
     if (!projectId || !key) return;
     const q = new URLSearchParams(range.query);
     if (search.trim()) q.set("search", search.trim());
+    const enc = encodeURIComponent(key);
     Promise.all([
-      apiFetch<Detail>(`/console/projects/${projectId}/problems/${key}?${range.query}`),
-      apiFetch<{ users: Detail["users"] }>(`/console/projects/${projectId}/problems/${key}/users?${q}`),
+      apiFetch<Detail>(`/console/projects/${projectId}/problems/${enc}?${range.query}`),
+      apiFetch<{ users: AffectedUser[] }>(`/console/projects/${projectId}/problems/${enc}/users?${q}`),
     ])
       .then(([detail, list]) => {
         setMeta({ method: detail.method, path: detail.path });
@@ -187,7 +223,10 @@ export function ProblemUsersPage() {
 
   return (
     <div>
-      <Link to={`${base}/problems/${key}`} className="mb-3 inline-block text-sm text-indigo-600 dark:text-indigo-400">
+      <Link
+        to={`${base}/problems/${encodeURIComponent(key ?? "")}`}
+        className="mb-3 inline-block text-sm text-indigo-600 dark:text-indigo-400"
+      >
         ← Error detail
       </Link>
       <PageHeader
@@ -197,7 +236,7 @@ export function ProblemUsersPage() {
       />
       <input
         className="input mb-4 max-w-md"
-        placeholder="Search user…"
+        placeholder="Search email or user id…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
@@ -206,25 +245,49 @@ export function ProblemUsersPage() {
         <table className="w-full text-left text-sm">
           <thead className="table-head">
             <tr>
-              <th className="px-5 py-2">User</th>
+              <th className="px-5 py-2">Email</th>
               <th className="px-5 py-2">Errors</th>
               <th className="px-5 py-2">Sessions</th>
               <th className="px-5 py-2">Last affected</th>
+              <th className="px-5 py-2" />
             </tr>
           </thead>
           <tbody>
             {users.map((u) => {
               const userKeyVal = encodeUserKey(u.userId, u.email ?? u.userKey);
+              const sessionHref = u.sampleSessionId
+                ? `${base}/sessions/${encodeURIComponent(u.sampleSessionId)}`
+                : null;
               return (
                 <tr key={u.userKey} className="border-b border-zinc-100 dark:border-zinc-800">
                   <td className="px-5 py-3">
-                    <Link className="text-indigo-600 hover:underline dark:text-indigo-400" to={`${base}/users/${userKeyVal}`}>
-                      {u.email || u.userId || u.userKey}
+                    <Link
+                      className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                      to={`${base}/users/${userKeyVal}`}
+                    >
+                      {u.email || u.userId || u.userKey || "Unknown user"}
                     </Link>
+                    {u.email && u.userId && (
+                      <span className="mt-0.5 block font-mono text-[11px] text-zinc-400">id {u.userId}</span>
+                    )}
                   </td>
                   <td className="px-5 py-3 tabular-nums">{u.errors}</td>
                   <td className="px-5 py-3 tabular-nums">{u.sessions}</td>
                   <td className="px-5 py-3 text-zinc-500">{relativeTime(u.lastSeen)}</td>
+                  <td className="px-5 py-3 text-right">
+                    {sessionHref ? (
+                      <Link className="btn-secondary whitespace-nowrap text-xs" to={sessionHref}>
+                        View session →
+                      </Link>
+                    ) : (
+                      <Link
+                        className="btn-secondary whitespace-nowrap text-xs"
+                        to={`${base}/users/${userKeyVal}`}
+                      >
+                        View journey →
+                      </Link>
+                    )}
+                  </td>
                 </tr>
               );
             })}

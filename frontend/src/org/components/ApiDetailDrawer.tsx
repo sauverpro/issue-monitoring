@@ -1,5 +1,6 @@
 import type { SessionAction } from "@/org/types";
 import { formatLatency, prettyJson, queryEntries, statusPhrase } from "@/org/lib/journey";
+import { ResultClassBadge } from "@/org/components/monitor";
 
 export function ApiDetailDrawer({
   action,
@@ -11,6 +12,10 @@ export function ApiDetailDrawer({
   const query = queryEntries(action.endpoint);
   const request = prettyJson(action.requestBody);
   const response = prettyJson(action.responseBody);
+  const failed =
+    action.resultClass != null
+      ? action.resultClass !== "success"
+      : action.status === "failure";
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -22,7 +27,10 @@ export function ApiDetailDrawer({
       />
       <aside className="relative flex h-full w-full max-w-md flex-col border-l border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-950">
         <header className="flex items-center justify-between border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
-          <h2 className="text-sm font-semibold tracking-wide">API Request</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold tracking-wide">API Request</h2>
+            <ResultClassBadge resultClass={action.resultClass} />
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -64,13 +72,7 @@ export function ApiDetailDrawer({
             <dl className="grid grid-cols-2 gap-2 text-xs">
               <div>
                 <dt className="text-zinc-500">Status</dt>
-                <dd
-                  className={
-                    action.status === "failure"
-                      ? "font-semibold text-red-600 dark:text-red-400"
-                      : "font-semibold"
-                  }
-                >
+                <dd className={failed ? "font-semibold text-red-600 dark:text-red-400" : "font-semibold"}>
                   {statusPhrase(action.httpStatus) || action.status || "—"}
                 </dd>
               </div>
@@ -78,6 +80,14 @@ export function ApiDetailDrawer({
                 <dt className="text-zinc-500">Latency</dt>
                 <dd className="tabular-nums">{formatLatency(action.latencyMs) || "—"}</dd>
               </div>
+              {action.resultClass && (
+                <div className="col-span-2">
+                  <dt className="mb-1 text-zinc-500">Classification</dt>
+                  <dd>
+                    <ResultClassBadge resultClass={action.resultClass} />
+                  </dd>
+                </div>
+              )}
             </dl>
             {response && (
               <pre className="mt-3 max-h-56 overflow-auto rounded-lg bg-zinc-950 p-3 text-[11px] text-zinc-100">

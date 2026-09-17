@@ -5,6 +5,7 @@ import { useRange } from "@/org/lib/range";
 import { Delta } from "@/org/lib/metrics";
 import type { SessionListItem } from "@/org/types";
 import { EmptyState, PageHeader, Panel, StatCard } from "@/org/components/ui";
+import { ApiClassSummary } from "@/org/components/monitor";
 
 type DashboardKpis = {
   kpis: { sessions: number; users: number; sessionsDelta: number | null; usersDelta: number | null };
@@ -74,7 +75,7 @@ export function SessionsPage() {
               <th className="px-5 py-2">Session</th>
               <th className="px-5 py-2">User</th>
               <th className="px-5 py-2">Actions</th>
-              <th className="px-5 py-2">Failures</th>
+              <th className="px-5 py-2">Outcomes</th>
               <th className="px-5 py-2">Last activity</th>
             </tr>
           </thead>
@@ -102,7 +103,9 @@ export function SessionsPage() {
                   )}
                 </td>
                 <td className="px-5 py-3 tabular-nums">{s.totalActions}</td>
-                <td className="px-5 py-3 tabular-nums">{s.failures}</td>
+                <td className="px-5 py-3">
+                  <ApiClassSummary outcomes={s.apiOutcomes} fallback={s.failures} />
+                </td>
                 <td className="px-5 py-3 text-zinc-500">{new Date(s.lastActivity).toLocaleString()}</td>
               </tr>
             ))}

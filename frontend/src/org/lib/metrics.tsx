@@ -38,15 +38,28 @@ export function healthLabel(availability: number, errorRate: number): {
 }
 
 export function problemKey(row: { method: string; path: string; statusCode?: number | null }): string {
-  return encodeURIComponent(`${row.method}::${row.path}::${row.statusCode ?? ""}`);
+  const raw = `${row.method}::${row.path}::${row.statusCode ?? ""}`;
+  // base64url — safe as a single path segment (no `/`)
+  const bytes = new TextEncoder().encode(raw);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 export function parseProblemKey(raw: string): { method: string; path: string; statusCode: number | null } {
   let decoded = raw;
   try {
-    decoded = decodeURIComponent(raw);
+    const padded = raw.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((raw.length + 3) % 4);
+    const bin = atob(padded);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    const fromB64 = new TextDecoder().decode(bytes);
+    if (fromB64.includes("::")) decoded = fromB64;
   } catch {
-    decoded = raw;
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {
+      decoded = raw;
+    }
   }
   const first = decoded.indexOf("::");
   const last = decoded.lastIndexOf("::");
