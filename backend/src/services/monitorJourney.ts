@@ -2,6 +2,14 @@ import type { Pool } from "pg";
 import { fetchActionsForSessions } from "./monitorSessions.js";
 import { isApiCall } from "./sessionSummary.js";
 import type { SessionAction } from "../types/sessionInvestigation.js";
+import type { ApiClassCounts } from "./httpResultClass.js";
+import {
+  apiClassCountsBySession,
+  apiClassCountsByUser,
+  apiClassTotals,
+  emptyApiClassCounts,
+  problemCount,
+} from "./monitorApiClassCounts.js";
 
 const USER_KEY_SQL = `COALESCE(NULLIF(TRIM(user_id), ''), NULLIF(TRIM(user_email), ''))`;
 
@@ -26,6 +34,7 @@ export type JourneyUser = {
   actions: number;
   errors: number;
   durationMs: number;
+  apiOutcomes?: ApiClassCounts;
 };
 
 export function parseDateRange(query: {
@@ -73,17 +82,32 @@ export function filterTimeline(
     if (filters.kind && filters.kind !== "all" && kind !== filters.kind) return false;
     if (filters.status && filters.status !== "all") {
       const st = (a.status ?? "").toLowerCase();
-      if (filters.status === "success" && st !== "success") return false;
-      if (filters.status === "failure" && st !== "failure") return false;
+      const rc = a.resultClass;
+      if (filters.status === "success") {
+        if (rc ? rc !== "success" : st !== "success") return false;
+      }
+      if (filters.status === "failure") {
+        if (rc ? rc === "success" : st !== "failure") return false;
+      }
     }
     if (filters.method && filters.method !== "all") {
       if ((a.method ?? "").toUpperCase() !== filters.method.toUpperCase()) return false;
     }
     if (filters.statusClass && filters.statusClass !== "all") {
-      const code = parseInt(a.httpStatus ?? "", 10);
-      if (Number.isNaN(code)) return false;
-      const cls = `${Math.floor(code / 100)}xx`;
-      if (cls !== filters.statusClass) return false;
+      // Prefer HTTP result class (success / client_failure / server_error / network)
+      if (
+        filters.statusClass === "success" ||
+        filters.statusClass === "client_failure" ||
+        filters.statusClass === "server_error" ||
+        filters.statusClass === "network"
+      ) {
+        if ((a.resultClass ?? "") !== filters.statusClass) return false;
+      } else {
+        const code = parseInt(a.httpStatus ?? "", 10);
+        if (Number.isNaN(code)) return false;
+        const cls = `${Math.floor(code / 100)}xx`;
+        if (cls !== filters.statusClass) return false;
+      }
     }
     if (filters.minLatency != null && filters.minLatency > 0) {
       if (a.latencyMs == null || a.latencyMs < filters.minLatency) return false;
@@ -116,7 +140,10 @@ export function classifyKind(a: SessionAction): string {
     if (msg.includes("fail") || msg.includes("error")) return "error";
     return t === "auth" ? "session" : "lifecycle";
   }
-  if (isApiCall(a)) return a.status === "failure" ? "api_failure" : "api";
+  if (isApiCall(a)) {
+    if (a.resultClass && a.resultClass !== "success") return "api_failure";
+    return a.status === "failure" ? "api_failure" : "api";
+  }
   return t || "other";
 }
 
@@ -167,10 +194,12 @@ export function buildJourneyMap(actions: SessionAction[]): JourneyMapNode[] {
     }
     if (isApiCall(a) && current) {
       current.apiTotal += 1;
-      if (a.status === "failure") {
+      const ok = a.resultClass ? a.resultClass === "success" : a.status === "success";
+      const fail = a.resultClass ? a.resultClass !== "success" : a.status === "failure";
+      if (fail) {
         current.apiFail += 1;
         current.failed = true;
-      } else if (a.status === "success") {
+      } else if (ok) {
         current.apiOk += 1;
       }
     }
@@ -244,8 +273,9 @@ export async function listProjectUsers(
   if (opts.filter === "active") {
     conds.push(`ended_at >= now() - interval '15 minutes'`);
   }
-  params.push(limit);
-  const having = opts.filter === "errors" ? `HAVING SUM(failure_events) > 0` : "";
+  // Fetch extra rows when filtering by classified problems so post-filter still fills the page.
+  const fetchLimit = opts.filter === "errors" ? Math.min(limit * 4, 320) : limit;
+  params.push(fetchLimit);
   const q = await pool.query<{
     user_key: string;
     user_id: string | null;
@@ -267,21 +297,44 @@ export async function listProjectUsers(
      FROM user_sessions
      WHERE ${conds.join(" AND ")}
      GROUP BY ${USER_KEY_SQL}
-     ${having}
      ORDER BY last_active DESC
      LIMIT $${i}`,
     params
   );
-  return q.rows.map((r) => ({
-    userKey: r.user_key,
-    userId: r.user_id,
-    email: r.email,
-    lastActive: r.last_active.toISOString(),
-    sessions: Number(r.sessions),
-    actions: Number(r.actions),
-    errors: Number(r.errors),
-    durationMs: Math.round(Number(r.duration_ms)),
-  }));
+
+  const range = opts.range ?? {
+    from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+    to: new Date(),
+  };
+  const counts = await apiClassCountsByUser(
+    pool,
+    projectId,
+    range.from,
+    range.to,
+    q.rows.map((r) => r.user_key)
+  );
+
+  let users: JourneyUser[] = q.rows.map((r) => {
+    const api = counts.get(r.user_key) ?? emptyApiClassCounts();
+    const problems = problemCount(api);
+    const legacy = Number(r.errors);
+    return {
+      userKey: r.user_key,
+      userId: r.user_id,
+      email: r.email,
+      lastActive: r.last_active.toISOString(),
+      sessions: Number(r.sessions),
+      actions: Number(r.actions),
+      errors: problems > 0 ? problems : legacy,
+      durationMs: Math.round(Number(r.duration_ms)),
+      apiOutcomes: api,
+    };
+  });
+
+  if (opts.filter === "errors") {
+    users = users.filter((u) => problemCount(u.apiOutcomes ?? emptyApiClassCounts()) > 0 || u.errors > 0);
+  }
+  return users.slice(0, limit);
 }
 
 export async function getUserProfile(
@@ -316,6 +369,12 @@ export async function getUserProfile(
   );
   const r = q.rows[0];
   if (!r) return null;
+  const to = new Date();
+  const from = new Date(to.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const counts = await apiClassCountsByUser(pool, projectId, from, to, [r.user_key]);
+  const api = counts.get(r.user_key) ?? emptyApiClassCounts();
+  const problems = problemCount(api);
+  const legacy = Number(r.errors);
   return {
     userKey: r.user_key,
     userId: r.user_id,
@@ -323,8 +382,9 @@ export async function getUserProfile(
     lastActive: r.last_active.toISOString(),
     sessions: Number(r.sessions),
     actions: Number(r.actions),
-    errors: Number(r.errors),
+    errors: problems > 0 ? problems : legacy,
     durationMs: Math.round(Number(r.duration_ms)),
+    apiOutcomes: api,
   };
 }
 
@@ -386,14 +446,24 @@ export async function getUserSessionsInRange(
      ORDER BY started_at DESC`,
     [projectId, ident, range.from, range.to]
   );
-  return q.rows.map((r) => ({
-    sessionId: r.session_id,
-    startedAt: r.started_at.toISOString(),
-    endedAt: r.ended_at.toISOString(),
-    durationMs: r.ended_at.getTime() - r.started_at.getTime(),
-    actions: r.total_events,
-    errors: r.failure_events,
-  }));
+  const counts = await apiClassCountsBySession(
+    pool,
+    projectId,
+    q.rows.map((r) => r.session_id)
+  );
+  return q.rows.map((r) => {
+    const api = counts.get(r.session_id) ?? emptyApiClassCounts();
+    const problems = problemCount(api);
+    return {
+      sessionId: r.session_id,
+      startedAt: r.started_at.toISOString(),
+      endedAt: r.ended_at.toISOString(),
+      durationMs: r.ended_at.getTime() - r.started_at.getTime(),
+      actions: r.total_events,
+      errors: problems > 0 ? problems : r.failure_events,
+      apiOutcomes: api,
+    };
+  });
 }
 
 export async function getUserTimeline(
@@ -428,33 +498,33 @@ export async function getJourneyHome(
   range: DateRange
 ) {
   const users = await listProjectUsers(pool, projectId, { range, limit: 40 });
-  const stats = await pool.query<{
-    users: string;
-    sessions: string;
-    errors: string;
-    avg_latency: string | null;
-  }>(
-    `SELECT
-       (SELECT COUNT(DISTINCT ${USER_KEY_SQL})::text FROM user_sessions
-         WHERE project_id = $1 AND ${USER_KEY_SQL} IS NOT NULL
-           AND ended_at >= $2 AND started_at <= $3) AS users,
-       (SELECT COUNT(*)::text FROM user_sessions
-         WHERE project_id = $1 AND ended_at >= $2 AND started_at <= $3) AS sessions,
-       (SELECT COUNT(*)::text FROM api_events
-         WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
-           AND outcome IN ('FAILURE', 'OTHER')) AS errors,
-       (SELECT AVG(latency_ms)::text FROM api_events
-         WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
-           AND latency_ms IS NOT NULL) AS avg_latency`,
-    [projectId, range.from, range.to]
-  );
+  const [stats, apiOutcomes] = await Promise.all([
+    pool.query<{
+      users: string;
+      sessions: string;
+      avg_latency: string | null;
+    }>(
+      `SELECT
+         (SELECT COUNT(DISTINCT ${USER_KEY_SQL})::text FROM user_sessions
+           WHERE project_id = $1 AND ${USER_KEY_SQL} IS NOT NULL
+             AND ended_at >= $2 AND started_at <= $3) AS users,
+         (SELECT COUNT(*)::text FROM user_sessions
+           WHERE project_id = $1 AND ended_at >= $2 AND started_at <= $3) AS sessions,
+         (SELECT AVG(latency_ms)::text FROM api_events
+           WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+             AND latency_ms IS NOT NULL) AS avg_latency`,
+      [projectId, range.from, range.to]
+    ),
+    apiClassTotals(pool, projectId, range.from, range.to),
+  ]);
   const s = stats.rows[0]!;
   return {
     stats: {
       activeUsers: Number(s.users),
       sessions: Number(s.sessions),
-      apiErrors: Number(s.errors),
+      apiErrors: problemCount(apiOutcomes),
       avgLatencyMs: s.avg_latency ? Math.round(Number(s.avg_latency)) : 0,
+      apiOutcomes,
     },
     users,
   };

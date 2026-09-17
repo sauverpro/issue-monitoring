@@ -21,12 +21,21 @@ describe("problemSeverity", () => {
 });
 
 describe("problem keys", () => {
-  it("round-trips method path status", () => {
+  it("round-trips method path status via base64url", () => {
     const key = encodeProblemKey("GET", "/api/tickets", 500);
+    assert.equal(key.includes("/"), false);
     const parsed = parseProblemKey(key);
     assert.equal(parsed.method, "GET");
     assert.equal(parsed.path, "/api/tickets");
     assert.equal(parsed.statusCode, 500);
+  });
+
+  it("still parses legacy encodeURIComponent keys", () => {
+    const legacy = encodeURIComponent("GET::/v1/agency/accounts/info::502");
+    const parsed = parseProblemKey(legacy);
+    assert.equal(parsed.method, "GET");
+    assert.equal(parsed.path, "/v1/agency/accounts/info");
+    assert.equal(parsed.statusCode, 502);
   });
 });
 

@@ -11,6 +11,8 @@ export type SessionAction = {
   message: string | null;
   type: string | null;
   status: string | null;
+  /** HTTP result class for API calls (success / client_failure / server_error / network). */
+  resultClass?: "success" | "client_failure" | "server_error" | "network" | null;
   actionType: string | null;
   service: string | null;
   method: string | null;
@@ -64,6 +66,12 @@ export type SessionListItem = {
   failures: number;
   startedAt: string;
   lastActivity: string;
+  apiOutcomes?: {
+    success: number;
+    clientFailure: number;
+    serverError: number;
+    network: number;
+  };
 };
 
 export type SessionFailure = {

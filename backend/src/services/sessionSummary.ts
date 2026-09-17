@@ -23,6 +23,9 @@ export function isApiCall(action: SessionAction): boolean {
 
 function isFailure(action: SessionAction): boolean {
   if (!isApiCall(action)) return false;
+  if (action.resultClass) {
+    return action.resultClass !== "success";
+  }
   const httpRaw = (action.httpStatus ?? "").toUpperCase();
   if (NETWORK_OTHER.has(httpRaw)) return false;
   const st = (action.status ?? "").toLowerCase();
@@ -37,6 +40,7 @@ function isFailure(action: SessionAction): boolean {
 
 function isSuccess(action: SessionAction): boolean {
   if (!isApiCall(action)) return false;
+  if (action.resultClass) return action.resultClass === "success";
   const st = (action.status ?? "").toLowerCase();
   if (st === "success") return true;
   const http = parseInt(action.httpStatus ?? "", 10);

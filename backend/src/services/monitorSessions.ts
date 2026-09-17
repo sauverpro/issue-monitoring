@@ -6,6 +6,8 @@ import type {
   SessionActionsResponse,
   SessionListItem,
 } from "../types/sessionInvestigation.js";
+import { classifyHttpResult } from "./httpResultClass.js";
+import { apiClassCountsBySession, emptyApiClassCounts, problemCount } from "./monitorApiClassCounts.js";
 
 export async function listProjectSessions(
   pool: Pool,
@@ -62,33 +64,50 @@ export async function listProjectSessions(
      LIMIT $${i}`,
     params
   );
-  return q.rows.map((r) => ({
-    sessionId: r.session_id,
-    userId: r.user_id,
-    userEmail: r.user_email,
-    role: r.role,
-    accountType: r.account_type,
-    totalActions: r.total_events,
-    failures: r.failure_events,
-    startedAt: r.started_at.toISOString(),
-    lastActivity: r.ended_at.toISOString(),
-  }));
+
+  const counts = await apiClassCountsBySession(
+    pool,
+    projectId,
+    q.rows.map((r) => r.session_id)
+  );
+
+  return q.rows.map((r) => {
+    const api = counts.get(r.session_id) ?? emptyApiClassCounts();
+    const problems = problemCount(api);
+    return {
+      sessionId: r.session_id,
+      userId: r.user_id,
+      userEmail: r.user_email,
+      role: r.role,
+      accountType: r.account_type,
+      totalActions: r.total_events,
+      failures: problems > 0 ? problems : r.failure_events,
+      startedAt: r.started_at.toISOString(),
+      lastActivity: r.ended_at.toISOString(),
+      apiOutcomes: api,
+    };
+  });
 }
 
 function mapApiRow(row: Record<string, unknown>, idx: number): SessionAction {
-  const status =
-    row.outcome === "SUCCESS"
-      ? "success"
-      : row.outcome === "FAILURE"
-        ? "failure"
-        : "other";
   const statusCode = Number(row.status_code);
+  const outcome = (row.outcome as string | null) ?? null;
+  const resultClass = classifyHttpResult(
+    Number.isFinite(statusCode) ? statusCode : 0,
+    outcome
+  );
+  const status =
+    resultClass === "success"
+      ? "success"
+      : resultClass === "network"
+        ? "other"
+        : "failure";
   const httpStatus =
     statusCode > 0
       ? String(statusCode)
       : row.failure_reason
         ? String(row.failure_reason)
-        : row.outcome === "OTHER"
+        : resultClass === "network"
           ? "FETCH_ERROR"
           : null;
   const occurred = row.occurred_at as Date;
@@ -98,6 +117,7 @@ function mapApiRow(row: Record<string, unknown>, idx: number): SessionAction {
     message: null,
     type: (row.sentry_type as string | null) ?? null,
     status,
+    resultClass,
     actionType: "api_call",
     service: (row.service as string | null) ?? (row.app_service as string | null),
     method: (row.http_method as string | null) ?? null,

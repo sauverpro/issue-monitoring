@@ -57,16 +57,37 @@ export function impactFromUsers(
 }
 
 export function encodeProblemKey(method: string, path: string, statusCode: number | null): string {
-  return encodeURIComponent(`${method}::${path}::${statusCode ?? ""}`);
+  const raw = `${method}::${path}::${statusCode ?? ""}`;
+  // base64url — no `/` or `+`, so Express/React Router path params stay intact
+  return Buffer.from(raw, "utf8").toString("base64url");
 }
 
 export function parseProblemKey(raw: string): { method: string; path: string; statusCode: number | null } {
   let decoded = raw;
-  try {
-    decoded = decodeURIComponent(raw);
-  } catch {
-    decoded = raw;
+  if (/^[A-Za-z0-9_-]+$/.test(raw) && raw.length >= 8) {
+    try {
+      const fromB64 = Buffer.from(raw, "base64url").toString("utf8");
+      if (fromB64.includes("::")) decoded = fromB64;
+    } catch {
+      /* fall through */
+    }
   }
+  if (!decoded.includes("::") || decoded === raw) {
+    try {
+      const uriDecoded = decodeURIComponent(raw);
+      if (uriDecoded.includes("::")) decoded = uriDecoded;
+    } catch {
+      /* keep decoded */
+    }
+  }
+  return parseColonProblemKey(decoded);
+}
+
+function parseColonProblemKey(decoded: string): {
+  method: string;
+  path: string;
+  statusCode: number | null;
+} {
   const first = decoded.indexOf("::");
   const last = decoded.lastIndexOf("::");
   if (first < 0 || last <= first) {
@@ -562,13 +583,16 @@ export async function getProblemAffectedUsers(
     errors: string;
     sessions: string;
     last_seen: Date;
+    sample_session_id: string | null;
   }>(
     `SELECT COALESCE(${USER_KEY_SQL}, session_id) AS user_key,
             MAX(user_id) FILTER (WHERE user_id IS NOT NULL AND TRIM(user_id) <> '') AS user_id,
             MAX(user_email) FILTER (WHERE user_email IS NOT NULL AND TRIM(user_email) <> '') AS email,
             COUNT(*)::text AS errors,
             COUNT(DISTINCT session_id)::text AS sessions,
-            MAX(occurred_at) AS last_seen
+            MAX(occurred_at) AS last_seen,
+            (ARRAY_AGG(session_id ORDER BY occurred_at DESC)
+              FILTER (WHERE session_id IS NOT NULL AND TRIM(session_id) <> ''))[1] AS sample_session_id
      FROM api_events
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        AND (${resultClass}) IN ('client_failure','server_error','network')
@@ -590,6 +614,7 @@ export async function getProblemAffectedUsers(
       errors: Number(r.errors),
       sessions: Number(r.sessions),
       lastSeen: r.last_seen.toISOString(),
+      sampleSessionId: r.sample_session_id,
     })),
   };
 }

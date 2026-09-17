@@ -82,3 +82,25 @@ export function apiOpsStatus(counts: {
   if (infraRate >= 0.05 || counts.serverError >= 5) return "degraded";
   return "healthy";
 }
+
+export type ApiClassCounts = {
+  success: number;
+  clientFailure: number;
+  serverError: number;
+  network: number;
+};
+
+export function emptyApiClassCounts(): ApiClassCounts {
+  return { success: 0, clientFailure: 0, serverError: 0, network: 0 };
+}
+
+export function problemCount(c: ApiClassCounts): number {
+  return c.clientFailure + c.serverError + c.network;
+}
+
+export function addClassCount(c: ApiClassCounts, cls: HttpResultClass, n = 1): void {
+  if (cls === "success") c.success += n;
+  else if (cls === "client_failure") c.clientFailure += n;
+  else if (cls === "server_error") c.serverError += n;
+  else if (cls === "network") c.network += n;
+}
