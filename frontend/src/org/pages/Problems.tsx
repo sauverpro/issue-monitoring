@@ -1,13 +1,17 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
+import { clsx } from "clsx";
 import { apiFetch } from "@/org/lib/api";
 import { useRange } from "@/org/lib/range";
 import { Delta, problemKey } from "@/org/lib/metrics";
-import type { ProblemRow } from "@/org/types";
+import type { HttpResultClass, ProblemRow } from "@/org/types";
 import { TimeRangePicker } from "@/org/components/TimeRangePicker";
-import { ImpactBar, SeverityBadge } from "@/org/components/monitor";
+import { ImpactBar, ResultClassBadge, SeverityBadge } from "@/org/components/monitor";
+import { DonutChart } from "@/org/components/charts";
 import { EmptyState, PageHeader, Panel, StatCard } from "@/org/components/ui";
 import { formatLatency, relativeTime } from "@/org/lib/journey";
+
+type ClassFilter = "all" | "server_error" | "client_failure" | "network";
 
 type ProblemsPayload = {
   summary: {
@@ -17,7 +21,16 @@ type ProblemsPayload = {
     usersAffectedDelta: number | null;
     errors5xx: number;
     errors5xxDelta: number | null;
+    clientFailures?: number;
+    clientFailuresDelta?: number | null;
+    networkErrors?: number;
+    networkErrorsDelta?: number | null;
     critical: number;
+  };
+  byClass?: {
+    clientFailure: number;
+    serverError: number;
+    network: number;
   };
   priority: Record<string, number>;
   errors: ProblemRow[];
@@ -31,11 +44,19 @@ type ProblemsPayload = {
   }[];
 };
 
+const FILTERS: { id: ClassFilter; label: string }[] = [
+  { id: "all", label: "All problems" },
+  { id: "server_error", label: "Server error" },
+  { id: "client_failure", label: "Client failure" },
+  { id: "network", label: "Network" },
+];
+
 export function ProblemsPage() {
   const { orgId, projectId } = useParams();
   const { range } = useRange();
   const [data, setData] = useState<ProblemsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<ClassFilter>("all");
 
   const load = useCallback(async () => {
     if (!projectId) return;
@@ -51,61 +72,138 @@ export function ProblemsPage() {
     void load();
   }, [load]);
 
+  const filtered = useMemo(() => {
+    if (!data) return [];
+    if (filter === "all") return data.errors;
+    return data.errors.filter((e) => e.resultClass === filter);
+  }, [data, filter]);
+
   if (error && !data) return <p className="text-red-600">{error}</p>;
   if (!data) return <p className="text-zinc-500">Loading…</p>;
 
   const base = `/orgs/${orgId}/projects/${projectId}`;
+  const byClass = data.byClass ?? {
+    clientFailure: data.summary.clientFailures ?? 0,
+    serverError: data.summary.errors5xx,
+    network: data.summary.networkErrors ?? 0,
+  };
+  const classTotal = byClass.clientFailure + byClass.serverError + byClass.network;
 
   return (
     <div>
       <PageHeader
         eyebrow="Application"
         title="Errors"
-        description="Which problems are hurting your users the most?"
+        description="Problems classified as client failure, server error (5xx), or network — including status 0 with SUCCESS/FAILURE outcomes."
         actions={<TimeRangePicker />}
       />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Total errors"
+          label="Total problems"
           value={data.summary.totalErrors.toLocaleString()}
           hint={<Delta value={data.summary.totalErrorsDelta} invert />}
         />
         <StatCard
-          label="Users affected"
-          value={data.summary.usersAffected.toLocaleString()}
-          hint={<Delta value={data.summary.usersAffectedDelta} invert />}
-        />
-        <StatCard
-          label="5xx errors"
-          value={data.summary.errors5xx.toLocaleString()}
+          label="Server errors (5xx)"
+          value={byClass.serverError.toLocaleString()}
           hint={<Delta value={data.summary.errors5xxDelta} invert />}
         />
-        <StatCard label="Critical" value={data.summary.critical} />
+        <StatCard
+          label="Client failures"
+          value={byClass.clientFailure.toLocaleString()}
+          hint={<Delta value={data.summary.clientFailuresDelta ?? null} invert />}
+        />
+        <StatCard
+          label="Network"
+          value={byClass.network.toLocaleString()}
+          hint={<Delta value={data.summary.networkErrorsDelta ?? null} invert />}
+        />
       </div>
 
-      <Panel className="mb-6">
-        <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium dark:border-zinc-800">
-          Problem priority
-        </div>
-        <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4">
-          <PriorityCount label="Critical" icon="🔴" count={data.priority.critical ?? 0} />
-          <PriorityCount label="High" icon="🟠" count={data.priority.high ?? 0} />
-          <PriorityCount label="Medium" icon="🟡" count={data.priority.medium ?? 0} />
-          <PriorityCount label="Low" icon="⚪" count={data.priority.low ?? 0} />
-        </div>
-      </Panel>
+      <div className="mb-6 grid gap-6 lg:grid-cols-3">
+        <Panel>
+          <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium dark:border-zinc-800">
+            Problem mix
+          </div>
+          <div className="p-5">
+            {classTotal === 0 ? (
+              <EmptyState title="No problems" body="Failed and network calls will classify here." />
+            ) : (
+              <DonutChart
+                center={classTotal.toLocaleString()}
+                slices={[
+                  { label: "Server error", value: byClass.serverError, color: "#ef4444" },
+                  { label: "Client failure", value: byClass.clientFailure, color: "#f59e0b" },
+                  { label: "Network", value: byClass.network, color: "#64748b" },
+                ].filter((s) => s.value > 0)}
+              />
+            )}
+          </div>
+        </Panel>
+        <Panel className="lg:col-span-2">
+          <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium dark:border-zinc-800">
+            Problem priority
+          </div>
+          <div className="grid grid-cols-2 gap-4 p-5 sm:grid-cols-4">
+            <PriorityCount label="Critical" icon="🔴" count={data.priority.critical ?? 0} />
+            <PriorityCount label="High" icon="🟠" count={data.priority.high ?? 0} />
+            <PriorityCount label="Medium" icon="🟡" count={data.priority.medium ?? 0} />
+            <PriorityCount label="Low" icon="⚪" count={data.priority.low ?? 0} />
+          </div>
+          <div className="border-t border-zinc-200 px-5 py-3 dark:border-zinc-800">
+            <p className="mb-2 text-xs font-medium text-zinc-500">Filter by class</p>
+            <div className="flex flex-wrap gap-2">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => setFilter(f.id)}
+                  className={clsx(
+                    "rounded-full px-3 py-1 text-xs font-medium",
+                    filter === f.id
+                      ? "bg-indigo-600 text-white"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300"
+                  )}
+                >
+                  {f.label}
+                  {f.id !== "all" && (
+                    <span className="ml-1 opacity-80">
+                      (
+                      {f.id === "server_error"
+                        ? byClass.serverError
+                        : f.id === "client_failure"
+                          ? byClass.clientFailure
+                          : byClass.network}
+                      )
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Panel>
+      </div>
 
       <div className="space-y-4">
-        {data.errors.length === 0 ? (
+        {filtered.length === 0 ? (
           <Panel>
-            <EmptyState title="No failures" body="Failed API calls will group here by method, path, and status." />
+            <EmptyState
+              title="No problems in this class"
+              body="Try another filter, or wait for failed / network API calls."
+            />
           </Panel>
         ) : (
-          data.errors.map((p) => (
-            <Panel key={problemKey(p)}>
+          filtered.map((p) => (
+            <Panel key={problemKey(p) + (p.resultClass ?? "")}>
               <div className="space-y-4 p-5">
-                <SeverityBadge severity={p.severity} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <SeverityBadge severity={p.severity} />
+                  <ResultClassBadge resultClass={p.resultClass as HttpResultClass | undefined} />
+                  {p.statusCode != null && (
+                    <span className="text-xs tabular-nums text-zinc-500">HTTP {p.statusCode}</span>
+                  )}
+                </div>
                 <p className="font-mono text-sm font-semibold">
                   {p.method} {p.path}
                 </p>
@@ -115,9 +213,7 @@ export function ProblemsPage() {
                   <span>{p.sessionsAffected} sessions</span>
                 </div>
                 <div className="grid gap-3 text-sm sm:grid-cols-2">
-                  <span>
-                    Error rate {(p.errorRate * 100).toFixed(1)}%
-                  </span>
+                  <span>Error rate {(p.errorRate * 100).toFixed(1)}%</span>
                   <span>Avg latency {formatLatency(p.avgLatencyMs)}</span>
                 </div>
                 <ImpactBar score={p.impact.score} label={p.impact.label} />

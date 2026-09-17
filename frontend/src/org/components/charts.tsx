@@ -204,10 +204,81 @@ export function DonutChart({
               />
               <span className="truncate">{s.label}</span>
             </span>
-            <span className="tabular-nums text-zinc-500">{((s.value / total) * 100).toFixed(1)}%</span>
+            <span className="tabular-nums text-zinc-500">
+              {s.value.toLocaleString()} · {((s.value / total) * 100).toFixed(1)}%
+            </span>
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+const STACK_COLORS = {
+  success: "#22c55e",
+  clientFailure: "#f59e0b",
+  serverError: "#ef4444",
+  network: "#64748b",
+};
+
+/** Horizontal stacked bars for per-API outcome mix. */
+export function StackedOutcomeBars({
+  rows,
+}: {
+  rows: {
+    label: string;
+    hint?: string;
+    success: number;
+    clientFailure: number;
+    serverError: number;
+    network: number;
+  }[];
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <ul className="space-y-3">
+      {rows.map((row) => {
+        const total = Math.max(1, row.success + row.clientFailure + row.serverError + row.network);
+        const segments = [
+          { key: "success", n: row.success, color: STACK_COLORS.success },
+          { key: "clientFailure", n: row.clientFailure, color: STACK_COLORS.clientFailure },
+          { key: "serverError", n: row.serverError, color: STACK_COLORS.serverError },
+          { key: "network", n: row.network, color: STACK_COLORS.network },
+        ].filter((s) => s.n > 0);
+        return (
+          <li key={row.label}>
+            <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+              <span className="truncate font-medium text-zinc-800 dark:text-zinc-200">{row.label}</span>
+              <span className="shrink-0 tabular-nums text-zinc-500">
+                {row.hint ?? total.toLocaleString()}
+              </span>
+            </div>
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+              {segments.map((s) => (
+                <div
+                  key={s.key}
+                  title={`${s.key}: ${s.n}`}
+                  style={{ width: `${(s.n / total) * 100}%`, background: s.color }}
+                />
+              ))}
+            </div>
+          </li>
+        );
+      })}
+      <li className="flex flex-wrap gap-3 pt-1 text-[10px] text-zinc-500">
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full" style={{ background: STACK_COLORS.success }} /> Success
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full" style={{ background: STACK_COLORS.clientFailure }} /> Client failure
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full" style={{ background: STACK_COLORS.serverError }} /> Server error
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full" style={{ background: STACK_COLORS.network }} /> Network
+        </span>
+      </li>
+    </ul>
   );
 }

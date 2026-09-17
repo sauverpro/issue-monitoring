@@ -5,7 +5,7 @@ import { useRange } from "@/org/lib/range";
 import { encodeUserKey, formatLatency, relativeTime } from "@/org/lib/journey";
 import type { ProblemRow } from "@/org/types";
 import { TimeRangePicker } from "@/org/components/TimeRangePicker";
-import { ImpactBar, SeverityBadge } from "@/org/components/monitor";
+import { ImpactBar, ResultClassBadge, SeverityBadge } from "@/org/components/monitor";
 import { LineChart, Sparkline } from "@/org/components/charts";
 import { EmptyState, PageHeader, Panel } from "@/org/components/ui";
 
@@ -52,7 +52,13 @@ export function ProblemDetailPage() {
         actions={<TimeRangePicker />}
       />
       <div className="mb-6">
-        <SeverityBadge severity={data.severity} />
+        <div className="flex flex-wrap items-center gap-2">
+          <SeverityBadge severity={data.severity} />
+          <ResultClassBadge resultClass={data.resultClass} />
+          {data.statusCode != null && (
+            <span className="text-xs tabular-nums text-zinc-500">HTTP {data.statusCode}</span>
+          )}
+        </div>
         <p className="mt-3 text-sm text-zinc-500">
           {data.occurrences} occurrences · {data.usersAffected} users affected · {data.sessionsAffected}{" "}
           sessions affected

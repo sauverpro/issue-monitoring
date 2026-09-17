@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
+import { clsx } from "clsx";
 import { apiFetch } from "@/org/lib/api";
 import { useRange } from "@/org/lib/range";
 import { Delta, problemKey } from "@/org/lib/metrics";
@@ -8,10 +9,32 @@ import type { FunnelStep, ProblemRow } from "@/org/types";
 import { TimeRangePicker } from "@/org/components/TimeRangePicker";
 import { InlineFunnel, JourneyFunnelViz } from "@/org/components/JourneyFunnelViz";
 import { SystemHealthStrip } from "@/org/components/monitor";
-import { SeverityBadge } from "@/org/components/monitor";
-import { BarChart } from "@/org/components/charts";
+import { ResultClassBadge, SeverityBadge } from "@/org/components/monitor";
+import { BarChart, DonutChart, StackedOutcomeBars } from "@/org/components/charts";
 import { EmptyState, PageHeader, Panel, StatCard } from "@/org/components/ui";
 import { relativeTime } from "@/org/lib/journey";
+
+type ApiOpsRow = {
+  service: string;
+  host: string | null;
+  total: number;
+  success: number;
+  clientFailure: number;
+  serverError: number;
+  network: number;
+  status: "healthy" | "degraded" | "critical" | "idle";
+};
+
+type ApiRequestRow = {
+  method: string;
+  path: string;
+  total: number;
+  success: number;
+  clientFailure: number;
+  serverError: number;
+  network: number;
+  lastSeen: string;
+};
 
 type Dashboard = {
   hasEvents: boolean;
@@ -38,8 +61,23 @@ type Dashboard = {
   };
   activity: { label: string; count: number }[];
   activityUnit: "hour" | "day";
+  apiOutcomes: {
+    success: number;
+    clientFailure: number;
+    serverError: number;
+    network: number;
+  };
+  apiOps: ApiOpsRow[];
+  apiRequestOutcomes: ApiRequestRow[];
   topProblems: ProblemRow[];
   funnel: FunnelStep[];
+};
+
+const STATUS_PILL: Record<ApiOpsRow["status"], string> = {
+  healthy: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+  degraded: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  critical: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  idle: "bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400",
 };
 
 export function DashboardPage() {
@@ -76,6 +114,14 @@ export function DashboardPage() {
   if (!data) return <p className="text-zinc-500">Loading…</p>;
 
   const base = `/orgs/${orgId}/projects/${projectId}`;
+  const outcomes = data.apiOutcomes ?? {
+    success: 0,
+    clientFailure: 0,
+    serverError: 0,
+    network: 0,
+  };
+  const outcomeTotal =
+    outcomes.success + outcomes.clientFailure + outcomes.serverError + outcomes.network;
 
   return (
     <div>
@@ -121,12 +167,153 @@ export function DashboardPage() {
       </div>
 
       <div className="mb-6 grid gap-6 lg:grid-cols-3">
+        <Panel>
+          <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium dark:border-zinc-800">
+            Request outcomes
+            <p className="mt-0.5 text-xs font-normal text-zinc-400">
+              Success · client failure · 5xx · network (status 0 uses outcome)
+            </p>
+          </div>
+          <div className="p-5">
+            {outcomeTotal === 0 ? (
+              <EmptyState title="No API calls" body="Ingested HTTP calls will classify here." />
+            ) : (
+              <DonutChart
+                center={outcomeTotal.toLocaleString()}
+                slices={[
+                  { label: "Success", value: outcomes.success, color: "#22c55e" },
+                  { label: "Client failure", value: outcomes.clientFailure, color: "#f59e0b" },
+                  { label: "Server error", value: outcomes.serverError, color: "#ef4444" },
+                  { label: "Network", value: outcomes.network, color: "#64748b" },
+                ].filter((s) => s.value > 0)}
+              />
+            )}
+          </div>
+        </Panel>
+        <Panel className="lg:col-span-2">
+          <div className="flex items-center justify-between border-b border-zinc-200 px-5 py-3 dark:border-zinc-800">
+            <div>
+              <span className="text-sm font-medium">API operational status</span>
+              <p className="text-xs font-normal text-zinc-400">All upstream APIs in this range</p>
+            </div>
+            <Link className="text-xs text-indigo-600 dark:text-indigo-400" to={`${base}/apis`}>
+              API Monitor →
+            </Link>
+          </div>
+          <div className="p-5">
+            {(data.apiOps ?? []).length === 0 ? (
+              <EmptyState title="No upstream traffic" body="Calls to labeled hosts appear here." />
+            ) : (
+              <div className="space-y-4">
+                <ul className="flex flex-wrap gap-2">
+                  {(data.apiOps ?? []).map((a) => (
+                    <li
+                      key={`${a.service}-${a.host}`}
+                      className={clsx(
+                        "rounded-full px-2.5 py-0.5 text-[11px] font-medium capitalize",
+                        STATUS_PILL[a.status]
+                      )}
+                    >
+                      {a.service}: {a.status}
+                    </li>
+                  ))}
+                </ul>
+                <StackedOutcomeBars
+                  rows={(data.apiOps ?? []).map((a) => ({
+                    label: a.host ? `${a.service} · ${a.host}` : a.service,
+                    hint: `${a.total.toLocaleString()} calls`,
+                    success: a.success,
+                    clientFailure: a.clientFailure,
+                    serverError: a.serverError,
+                    network: a.network,
+                  }))}
+                />
+              </div>
+            )}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="mb-6">
+        <Panel>
+          <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium dark:border-zinc-800">
+            API requests by outcome
+            <p className="mt-0.5 text-xs font-normal text-zinc-400">
+              Top endpoints with success / client failure / server error / network mix
+            </p>
+          </div>
+          {(data.apiRequestOutcomes ?? []).length === 0 ? (
+            <EmptyState title="No endpoints yet" body="Individual API paths will list here." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="table-head">
+                  <tr>
+                    <th className="px-5 py-2">Request</th>
+                    <th className="px-5 py-2">Total</th>
+                    <th className="px-5 py-2">Success</th>
+                    <th className="px-5 py-2">Client</th>
+                    <th className="px-5 py-2">5xx</th>
+                    <th className="px-5 py-2">Network</th>
+                    <th className="px-5 py-2">Mix</th>
+                    <th className="px-5 py-2">Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.apiRequestOutcomes ?? []).map((r) => {
+                    const total = Math.max(1, r.total);
+                    return (
+                      <tr key={`${r.method}-${r.path}`} className="border-b border-zinc-100 dark:border-zinc-800">
+                        <td className="max-w-md truncate px-5 py-3 font-mono text-xs">
+                          <span className="text-zinc-400">{r.method}</span> {r.path}
+                        </td>
+                        <td className="px-5 py-3 tabular-nums">{r.total.toLocaleString()}</td>
+                        <td className="px-5 py-3 tabular-nums text-emerald-700 dark:text-emerald-400">
+                          {r.success.toLocaleString()}
+                        </td>
+                        <td className="px-5 py-3 tabular-nums text-amber-700 dark:text-amber-400">
+                          {r.clientFailure.toLocaleString()}
+                        </td>
+                        <td className="px-5 py-3 tabular-nums text-red-600 dark:text-red-400">
+                          {r.serverError.toLocaleString()}
+                        </td>
+                        <td className="px-5 py-3 tabular-nums text-zinc-500">{r.network.toLocaleString()}</td>
+                        <td className="px-5 py-3">
+                          <div className="flex h-2 w-28 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                            {r.success > 0 && (
+                              <div style={{ width: `${(r.success / total) * 100}%`, background: "#22c55e" }} />
+                            )}
+                            {r.clientFailure > 0 && (
+                              <div
+                                style={{ width: `${(r.clientFailure / total) * 100}%`, background: "#f59e0b" }}
+                              />
+                            )}
+                            {r.serverError > 0 && (
+                              <div
+                                style={{ width: `${(r.serverError / total) * 100}%`, background: "#ef4444" }}
+                              />
+                            )}
+                            {r.network > 0 && (
+                              <div style={{ width: `${(r.network / total) * 100}%`, background: "#64748b" }} />
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-xs text-zinc-500">{relativeTime(r.lastSeen)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <div className="mb-6 grid gap-6 lg:grid-cols-3">
         <Panel className="lg:col-span-2">
           <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium dark:border-zinc-800">
             User activity
-            <span className="ml-2 text-xs font-normal text-zinc-400">
-              {range.label}
-            </span>
+            <span className="ml-2 text-xs font-normal text-zinc-400">{range.label}</span>
           </div>
           <div className="p-4">
             <BarChart
@@ -174,7 +361,10 @@ export function DashboardPage() {
                     to={`${base}/problems/${problemKey(p)}`}
                     className="block hover:text-indigo-600 dark:hover:text-indigo-400"
                   >
-                    <SeverityBadge severity={p.severity} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <SeverityBadge severity={p.severity} />
+                      <ResultClassBadge resultClass={p.resultClass} />
+                    </div>
                     <p className="mt-1 font-mono text-xs">
                       {p.method} {p.path}
                     </p>

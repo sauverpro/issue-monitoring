@@ -88,12 +88,15 @@ export type FunnelStep = {
 
 export type ProblemSeverity = "critical" | "high" | "medium" | "low";
 
+export type HttpResultClass = "success" | "client_failure" | "server_error" | "network";
+
 export type ProblemRow = {
   severity: ProblemSeverity;
   method: string;
   path: string;
   statusCode: number | null;
   failureReason: string | null;
+  resultClass?: HttpResultClass;
   occurrences: number;
   usersAffected: number;
   sessionsAffected: number;

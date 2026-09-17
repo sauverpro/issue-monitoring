@@ -18,6 +18,38 @@ export function SeverityBadge({ severity }: { severity: ProblemSeverity | string
   );
 }
 
+export function ResultClassBadge({
+  resultClass,
+}: {
+  resultClass?: string | null;
+}) {
+  const map: Record<string, { label: string; className: string }> = {
+    server_error: {
+      label: "Server error (5xx)",
+      className: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+    },
+    client_failure: {
+      label: "Client failure",
+      className: "bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300",
+    },
+    network: {
+      label: "Network",
+      className: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+    },
+    success: {
+      label: "Success",
+      className: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    },
+  };
+  const s = map[resultClass ?? ""] ?? null;
+  if (!s) return null;
+  return (
+    <span className={clsx("rounded-full px-2.5 py-0.5 text-[11px] font-medium", s.className)}>
+      {s.label}
+    </span>
+  );
+}
+
 export function ImpactBar({ score, label }: { score: number; label: string }) {
   const pct = Math.min(100, Math.round(score * 100));
   return (
