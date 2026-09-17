@@ -2,6 +2,9 @@ import type { Pool } from "pg";
 import type { DateRange } from "./monitorJourney.js";
 import { getReportFunnels, previousRange, pctDelta } from "./monitorReports.js";
 import { NAV_KIND_SQL, navKindSql, pickFunnelStart, screenLabelSql } from "./monitorScreenLabel.js";
+import { apiOpsStatus, classifyHttpResult, httpResultClassSql, type HttpResultClass } from "./httpResultClass.js";
+import { listProjectUpstreams } from "./tenancy.js";
+import { matchUpstreamSlug, normalizeHost } from "./monitorHosts.js";
 
 const USER_KEY_SQL = `COALESCE(NULLIF(TRIM(user_id), ''), NULLIF(TRIM(user_email), ''))`;
 
@@ -28,11 +31,18 @@ export function problemSeverity(opts: {
   statusCode: number | null;
   occurrences: number;
   usersAffected: number;
+  resultClass?: HttpResultClass;
 }): ProblemSeverity {
   const code = opts.statusCode ?? 0;
-  if (code >= 500 && (opts.occurrences >= 80 || opts.usersAffected >= 30)) return "critical";
-  if (code >= 500 || opts.occurrences >= 40) return "high";
-  if (code >= 400 || opts.occurrences >= 10) return "medium";
+  const cls = opts.resultClass ?? classifyHttpResult(code, null);
+  const isServer = cls === "server_error" || code >= 500;
+  const isNetwork = cls === "network";
+  const isClient = cls === "client_failure" || (code >= 400 && code < 500);
+
+  if (isServer && (opts.occurrences >= 80 || opts.usersAffected >= 30)) return "critical";
+  if (isServer || opts.occurrences >= 40) return "high";
+  if (isNetwork && (opts.occurrences >= 20 || opts.usersAffected >= 15)) return "high";
+  if (isClient || isNetwork || opts.occurrences >= 10) return "medium";
   return "low";
 }
 
@@ -197,6 +207,7 @@ type ProblemRow = {
   path: string;
   statusCode: number | null;
   failureReason: string | null;
+  resultClass: HttpResultClass;
   occurrences: number;
   usersAffected: number;
   sessionsAffected: number;
@@ -209,11 +220,13 @@ type ProblemRow = {
 };
 
 async function loadFailureGroups(pool: Pool, projectId: string, range: DateRange) {
+  const resultClass = httpResultClassSql();
   const q = await pool.query<{
     method: string | null;
     path: string;
     status_code: number | null;
     failure_reason: string | null;
+    result_class: string;
     occurrences: string;
     users_affected: string;
     sessions_affected: string;
@@ -225,6 +238,7 @@ async function loadFailureGroups(pool: Pool, projectId: string, range: DateRange
             ${EVENT_PATH_SQL} AS path,
             status_code,
             MIN(failure_reason) AS failure_reason,
+            ${resultClass} AS result_class,
             COUNT(*)::text AS occurrences,
             COUNT(DISTINCT COALESCE(${USER_KEY_SQL}, session_id))::text AS users_affected,
             COUNT(DISTINCT session_id)::text AS sessions_affected,
@@ -234,8 +248,8 @@ async function loadFailureGroups(pool: Pool, projectId: string, range: DateRange
      FROM api_events
      WHERE project_id = $1
        AND occurred_at >= $2 AND occurred_at <= $3
-       AND outcome IN ('FAILURE', 'OTHER')
-     GROUP BY COALESCE(http_method, 'GET'), ${EVENT_PATH_SQL}, status_code
+       AND (${resultClass}) IN ('client_failure', 'server_error', 'network')
+     GROUP BY COALESCE(http_method, 'GET'), ${EVENT_PATH_SQL}, status_code, ${resultClass}
      ORDER BY COUNT(*) DESC
      LIMIT 80`,
     [projectId, range.from, range.to]
@@ -265,16 +279,19 @@ async function loadFailureGroups(pool: Pool, projectId: string, range: DateRange
     const occurrences = Number(r.occurrences);
     const usersAffected = Number(r.users_affected);
     const total = totalMap.get(`${method}\0${r.path}`) ?? occurrences;
+    const cls = (r.result_class as HttpResultClass) || "client_failure";
     const severity = problemSeverity({
       statusCode: r.status_code,
       occurrences,
       usersAffected,
+      resultClass: cls,
     });
     return {
       method,
       path: r.path || "/",
       statusCode: r.status_code,
       failureReason: r.failure_reason,
+      resultClass: cls,
       occurrences,
       usersAffected,
       sessionsAffected: Number(r.sessions_affected),
@@ -309,10 +326,19 @@ export async function getProjectProblems(pool: Pool, projectId: string, range: D
       totalErrorsDelta: pctDelta(summary.errors, prevSummary.errors),
       usersAffected: summary.users,
       usersAffectedDelta: pctDelta(summary.users, prevSummary.users),
-      errors5xx: summary.errors5xx,
-      errors5xxDelta: pctDelta(summary.errors5xx, prevSummary.errors5xx),
+      errors5xx: summary.serverError,
+      errors5xxDelta: pctDelta(summary.serverError, prevSummary.serverError),
+      clientFailures: summary.clientFailure,
+      clientFailuresDelta: pctDelta(summary.clientFailure, prevSummary.clientFailure),
+      networkErrors: summary.network,
+      networkErrorsDelta: pctDelta(summary.network, prevSummary.network),
       critical: priority.critical,
       usersInRange: totalUsers,
+    },
+    byClass: {
+      clientFailure: summary.clientFailure,
+      serverError: summary.serverError,
+      network: summary.network,
     },
     priority,
     errors,
@@ -321,21 +347,32 @@ export async function getProjectProblems(pool: Pool, projectId: string, range: D
 }
 
 async function problemSummaryStats(pool: Pool, projectId: string, range: DateRange) {
-  const q = await pool.query<{ errors: string; users: string; errors5xx: string }>(
+  const resultClass = httpResultClassSql();
+  const q = await pool.query<{
+    errors: string;
+    users: string;
+    client_failure: string;
+    server_error: string;
+    network: string;
+  }>(
     `SELECT
-       COUNT(*)::text AS errors,
-       COUNT(DISTINCT COALESCE(${USER_KEY_SQL}, session_id))::text AS users,
-       COUNT(*) FILTER (WHERE status_code >= 500)::text AS errors5xx
+       COUNT(*) FILTER (WHERE (${resultClass}) IN ('client_failure','server_error','network'))::text AS errors,
+       COUNT(DISTINCT COALESCE(${USER_KEY_SQL}, session_id))
+         FILTER (WHERE (${resultClass}) IN ('client_failure','server_error','network'))::text AS users,
+       COUNT(*) FILTER (WHERE (${resultClass}) = 'client_failure')::text AS client_failure,
+       COUNT(*) FILTER (WHERE (${resultClass}) = 'server_error')::text AS server_error,
+       COUNT(*) FILTER (WHERE (${resultClass}) = 'network')::text AS network
      FROM api_events
-     WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
-       AND outcome IN ('FAILURE','OTHER')`,
+     WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3`,
     [projectId, range.from, range.to]
   );
   const r = q.rows[0]!;
   return {
     errors: Number(r.errors),
     users: Number(r.users),
-    errors5xx: Number(r.errors5xx),
+    clientFailure: Number(r.client_failure),
+    serverError: Number(r.server_error),
+    network: Number(r.network),
   };
 }
 
@@ -388,6 +425,7 @@ export async function getProblemDetail(
     params.push(key.statusCode);
   }
 
+  const resultClass = httpResultClassSql();
   const fail = await pool.query<{
     occurrences: string;
     users_affected: string;
@@ -412,7 +450,7 @@ export async function getProblemDetail(
             MIN(failure_reason) AS failure_reason
      FROM api_events
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
-       AND outcome IN ('FAILURE','OTHER')
+       AND (${resultClass}) IN ('client_failure','server_error','network')
        AND COALESCE(http_method, 'GET') = $4
        AND ${EVENT_PATH_SQL} = $5
        AND ${statusSql}`,
@@ -442,7 +480,7 @@ export async function getProblemDetail(
     `SELECT (occurred_at AT TIME ZONE 'UTC')::date::text AS date, COUNT(*)::text AS n
      FROM api_events
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
-       AND outcome IN ('FAILURE','OTHER')
+       AND (${resultClass}) IN ('client_failure','server_error','network')
        AND COALESCE(http_method, 'GET') = $4
        AND ${EVENT_PATH_SQL} = $5
        AND ${statusSql}
@@ -458,10 +496,12 @@ export async function getProblemDetail(
   const occurrences = Number(f.occurrences);
   const usersAffected = Number(f.users_affected);
   const total = Number(t.total);
+  const cls = classifyHttpResult(key.statusCode, key.statusCode === 0 ? "OTHER" : null);
   const severity = problemSeverity({
     statusCode: key.statusCode,
     occurrences,
     usersAffected,
+    resultClass: cls,
   });
   const usersQ = await pool.query<{ n: string }>(
     `SELECT COUNT(DISTINCT ${USER_KEY_SQL})::text AS n FROM user_sessions
@@ -475,6 +515,7 @@ export async function getProblemDetail(
     path: key.path,
     statusCode: key.statusCode,
     failureReason: f.failure_reason,
+    resultClass: cls,
     severity,
     occurrences,
     usersAffected,
@@ -513,6 +554,7 @@ export async function getProblemAffectedUsers(
   }
   params.push(limit);
 
+  const resultClass = httpResultClassSql();
   const q = await pool.query<{
     user_key: string | null;
     user_id: string | null;
@@ -529,7 +571,7 @@ export async function getProblemAffectedUsers(
             MAX(occurred_at) AS last_seen
      FROM api_events
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
-       AND outcome IN ('FAILURE','OTHER')
+       AND (${resultClass}) IN ('client_failure','server_error','network')
        AND COALESCE(http_method, 'GET') = $4
        AND ${EVENT_PATH_SQL} = $5
        AND ${statusSql}
@@ -556,6 +598,8 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
   const prev = previousRange(range);
   const spanMs = range.to.getTime() - range.from.getTime();
   const hourly = spanMs <= 36 * 3600000;
+  const resultClass = httpResultClassSql();
+  const infraFailSql = `${resultClass} IN ('server_error', 'network')`;
 
   const kpi = await pool.query<{
     users: string;
@@ -583,7 +627,7 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3) AS apis,
        (SELECT COUNT(*)::text FROM api_events
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
-           AND outcome IN ('FAILURE','OTHER')) AS errors,
+           AND (${infraFailSql})) AS errors,
        (SELECT AVG(latency_ms)::text FROM api_events
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
            AND latency_ms IS NOT NULL) AS avg_latency,
@@ -598,7 +642,7 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5) AS prev_apis,
        (SELECT COUNT(*)::text FROM api_events
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5
-           AND outcome IN ('FAILURE','OTHER')) AS prev_errors,
+           AND (${infraFailSql})) AS prev_errors,
        (SELECT AVG(latency_ms)::text FROM api_events
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5
            AND latency_ms IS NOT NULL) AS prev_latency`,
@@ -647,10 +691,153 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
     activity = activityQ.rows.map((r) => ({ label: r.label, count: Number(r.n) }));
   }
 
-  const [problems, funnels] = await Promise.all([
+  const [problems, funnels, outcomeQ, byServiceQ, byEndpointQ] = await Promise.all([
     getProjectProblems(pool, projectId, range),
     getReportFunnels(pool, projectId, range),
+    pool.query<{ cls: string; n: string }>(
+      `SELECT ${resultClass} AS cls, COUNT(*)::text AS n
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+       GROUP BY 1`,
+      [projectId, range.from, range.to]
+    ),
+    pool.query<{
+      service: string;
+      host: string | null;
+      cls: string;
+      n: string;
+    }>(
+      `SELECT service,
+              (regexp_match(COALESCE(request_url, ''), 'https?://([^/]+)'))[1] AS host,
+              ${resultClass} AS cls,
+              COUNT(*)::text AS n
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+       GROUP BY service, host, 3`,
+      [projectId, range.from, range.to]
+    ),
+    pool.query<{
+      method: string;
+      path: string;
+      cls: string;
+      n: string;
+      last_seen: Date;
+    }>(
+      `SELECT COALESCE(http_method, 'GET') AS method,
+              ${EVENT_PATH_SQL} AS path,
+              ${resultClass} AS cls,
+              COUNT(*)::text AS n,
+              MAX(occurred_at) AS last_seen
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+       GROUP BY 1, 2, 3
+       ORDER BY COUNT(*) DESC
+       LIMIT 80`,
+      [projectId, range.from, range.to]
+    ),
   ]);
+
+  const outcomeTotals = {
+    success: 0,
+    clientFailure: 0,
+    serverError: 0,
+    network: 0,
+  };
+  for (const r of outcomeQ.rows) {
+    const n = Number(r.n);
+    if (r.cls === "success") outcomeTotals.success += n;
+    else if (r.cls === "client_failure") outcomeTotals.clientFailure += n;
+    else if (r.cls === "server_error") outcomeTotals.serverError += n;
+    else if (r.cls === "network") outcomeTotals.network += n;
+  }
+
+  const upstreams = await listProjectUpstreams(pool, projectId);
+  type Acc = {
+    service: string;
+    host: string | null;
+    success: number;
+    clientFailure: number;
+    serverError: number;
+    network: number;
+  };
+  const serviceMap = new Map<string, Acc>();
+  for (const r of byServiceQ.rows) {
+    const resolved =
+      (r.host ? matchUpstreamSlug(`https://${r.host}/`, upstreams) : null) ?? r.service;
+    const hostNorm = r.host ? normalizeHost(r.host) : null;
+    const key = `${resolved.toUpperCase()}::${hostNorm ?? ""}`;
+    const cur = serviceMap.get(key) ?? {
+      service: resolved.toUpperCase(),
+      host: hostNorm,
+      success: 0,
+      clientFailure: 0,
+      serverError: 0,
+      network: 0,
+    };
+    const n = Number(r.n);
+    if (r.cls === "success") cur.success += n;
+    else if (r.cls === "client_failure") cur.clientFailure += n;
+    else if (r.cls === "server_error") cur.serverError += n;
+    else if (r.cls === "network") cur.network += n;
+    serviceMap.set(key, cur);
+  }
+  const apiOps = [...serviceMap.values()]
+    .map((a) => {
+      const total = a.success + a.clientFailure + a.serverError + a.network;
+      return {
+        service: a.service,
+        host: a.host,
+        total,
+        success: a.success,
+        clientFailure: a.clientFailure,
+        serverError: a.serverError,
+        network: a.network,
+        status: apiOpsStatus({
+          success: a.success,
+          clientFailure: a.clientFailure,
+          serverError: a.serverError,
+          network: a.network,
+        }),
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+
+  type EpAcc = {
+    method: string;
+    path: string;
+    success: number;
+    clientFailure: number;
+    serverError: number;
+    network: number;
+    lastSeen: string;
+  };
+  const epMap = new Map<string, EpAcc>();
+  for (const r of byEndpointQ.rows) {
+    const key = `${r.method} ${r.path}`;
+    const cur = epMap.get(key) ?? {
+      method: r.method,
+      path: r.path,
+      success: 0,
+      clientFailure: 0,
+      serverError: 0,
+      network: 0,
+      lastSeen: r.last_seen.toISOString(),
+    };
+    const n = Number(r.n);
+    if (r.cls === "success") cur.success += n;
+    else if (r.cls === "client_failure") cur.clientFailure += n;
+    else if (r.cls === "server_error") cur.serverError += n;
+    else if (r.cls === "network") cur.network += n;
+    if (r.last_seen.toISOString() > cur.lastSeen) cur.lastSeen = r.last_seen.toISOString();
+    epMap.set(key, cur);
+  }
+  const apiRequests = [...epMap.values()]
+    .map((e) => ({
+      ...e,
+      total: e.success + e.clientFailure + e.serverError + e.network,
+    }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 12);
 
   const startStep = pickFunnelStart(funnels.steps);
   const start =
@@ -695,6 +882,9 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
     },
     activity,
     activityUnit: hourly ? "hour" : "day",
+    apiOutcomes: outcomeTotals,
+    apiOps,
+    apiRequestOutcomes: apiRequests,
     topProblems: problems.errors.slice(0, 5),
     funnel,
   };
