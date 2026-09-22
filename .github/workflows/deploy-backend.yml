@@ -45,19 +45,16 @@ jobs:
         with:
           node-version: 22
           cache: "npm"
-          cache-dependency-path: backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: backend
         run: npm ci
 
       - name: Build TypeScript
-        working-directory: backend
-        run: npm run build
+        run: npm run build -w backend
 
       - name: Run tests
-        working-directory: backend
-        run: npm test
+        run: npm test -w backend
 
   # ── Job 2: Deploy to VPS via SSH ─────────────────────────────────────────────
   deploy:
@@ -93,32 +90,32 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
 
-            # ── Install dependencies ──────────────────────────────
+            # ── Install dependencies (workspace root lockfile) ────
             echo ""
             echo "📦 Installing dependencies..."
-            cd backend
-            npm ci --production=false 
+            npm ci
 
             # ── Run database migrations ───────────────────────────
             echo ""
             echo "🗄️  Running database migrations..."
-            npx tsx scripts/migrate.ts
+            npm run db:migrate -w backend
 
             # ── Build TypeScript ──────────────────────────────────
             echo ""
             echo "🔨 Building TypeScript..."
-            npm run build
+            npm run build -w backend
 
             # ── Reload PM2 (zero-downtime) ────────────────────────
             echo ""
             echo "♻️  Reloading PM2 process..."
+            cd backend
             pm2 reload issue-monitor-api || pm2 start ecosystem.config.cjs
 
             # ── Health check ──────────────────────────────────────
             echo ""
             echo "🏥 Running health check..."
             sleep 3
-            HEALTH=$(curl -sf http://localhost:3002/health || echo "FAILED")
+            HEALTH=$(curl -sf http://localhost:3002/health || curl -sf http://localhost:3000/health || echo "FAILED")
             echo "   Health response: $HEALTH"
 
             if echo "$HEALTH" | grep -q '"ok":true'; then
