@@ -5,53 +5,22 @@ import type { Pool } from "pg";
 import { requireConsoleJwt, signConsoleJwt } from "../middleware/consoleJwt.js";
 import { listOrgsForUser, toOrgListItem } from "../services/tenancy.js";
 
-const registerSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(8).max(200),
-  name: z.string().max(120).optional(),
-});
-
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(200),
+});
+
 export function consoleAuthRouter(pool: Pool): IRouter {
   const r = Router();
 
-  r.post("/console/auth/register", async (req, res) => {
-    const parsed = registerSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.flatten() });
-      return;
-    }
-    const email = parsed.data.email.toLowerCase();
-    const hash = await bcrypt.hash(parsed.data.password, 12);
-    try {
-      const q = await pool.query<{ id: string; is_platform_admin: boolean }>(
-        `INSERT INTO console_users (email, password_hash, name)
-         VALUES ($1, $2, $3)
-         RETURNING id::text, is_platform_admin`,
-        [email, hash, parsed.data.name ?? null]
-      );
-      const row = q.rows[0]!;
-      const token = signConsoleJwt(row.id, email, row.is_platform_admin);
-      const orgs = (await listOrgsForUser(pool, row.id)).map(toOrgListItem);
-      res.status(201).json({
-        token,
-        email,
-        isPlatformAdmin: row.is_platform_admin,
-        orgs,
-      });
-    } catch (err) {
-      const code = (err as { code?: string }).code;
-      if (code === "23505") {
-        res.status(409).json({ error: "Email already registered" });
-        return;
-      }
-      throw err;
-    }
-  });
+  // There is no public sign-up: platform admins are seeded (scripts/seed.ts) and
+  // every other account is provisioned by an org admin via
+  // POST /console/organizations/:orgId/members.
 
   r.post("/console/auth/login", async (req, res) => {
     const parsed = loginSchema.safeParse(req.body);
@@ -64,8 +33,10 @@ export function consoleAuthRouter(pool: Pool): IRouter {
       id: string;
       password_hash: string;
       is_platform_admin: boolean;
+      must_change_password: boolean;
     }>(
-      `SELECT id::text, password_hash, is_platform_admin FROM console_users WHERE email = $1`,
+      `SELECT id::text, password_hash, is_platform_admin, must_change_password
+       FROM console_users WHERE email = $1`,
       [email]
     );
     const row = q.rows[0];
@@ -75,17 +46,62 @@ export function consoleAuthRouter(pool: Pool): IRouter {
     }
     const token = signConsoleJwt(row.id, email, row.is_platform_admin);
     const orgs = (await listOrgsForUser(pool, row.id)).map(toOrgListItem);
-    res.json({ token, email, isPlatformAdmin: row.is_platform_admin, orgs });
+    res.json({
+      token,
+      email,
+      isPlatformAdmin: row.is_platform_admin,
+      mustChangePassword: row.must_change_password,
+      orgs,
+    });
   });
 
   r.get("/console/auth/me", requireConsoleJwt, async (req, res) => {
     const userId = req.consoleAuth!.sub;
+    const q = await pool.query<{ must_change_password: boolean; is_platform_admin: boolean }>(
+      `SELECT must_change_password, is_platform_admin FROM console_users WHERE id = $1`,
+      [userId]
+    );
+    const row = q.rows[0];
+    if (!row) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
     const orgs = (await listOrgsForUser(pool, userId)).map(toOrgListItem);
     res.json({
       email: req.consoleAuth!.email,
-      isPlatformAdmin: req.consoleAuth!.isPlatformAdmin,
+      // Read the flag live so revoking platform admin takes effect without re-login.
+      isPlatformAdmin: row.is_platform_admin,
+      mustChangePassword: row.must_change_password,
       orgs,
     });
+  });
+
+  r.post("/console/auth/change-password", requireConsoleJwt, async (req, res) => {
+    const parsed = changePasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.flatten() });
+      return;
+    }
+    const userId = req.consoleAuth!.sub;
+    const q = await pool.query<{ password_hash: string }>(
+      `SELECT password_hash FROM console_users WHERE id = $1`,
+      [userId]
+    );
+    const row = q.rows[0];
+    if (!row || !(await bcrypt.compare(parsed.data.currentPassword, row.password_hash))) {
+      res.status(401).json({ error: "Current password is incorrect" });
+      return;
+    }
+    if (parsed.data.currentPassword === parsed.data.newPassword) {
+      res.status(400).json({ error: "New password must differ from the current one" });
+      return;
+    }
+    const hash = await bcrypt.hash(parsed.data.newPassword, 12);
+    await pool.query(
+      `UPDATE console_users SET password_hash = $2, must_change_password = false WHERE id = $1`,
+      [userId, hash]
+    );
+    res.json({ ok: true });
   });
 
   return r;

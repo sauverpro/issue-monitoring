@@ -8,6 +8,7 @@ import { generateApiKey } from "../services/apiKeys.js";
 import { slugify, canViewKeys } from "../services/orgRoles.js";
 import {
   listProjectUpstreams,
+  needsProjectAssignment,
   refreshAllowedHosts,
 } from "../services/tenancy.js";
 import { getProjectOverview, getProjectApiStats } from "../services/monitorMetrics.js";
@@ -76,12 +77,28 @@ export function consoleProjectsRouter(pool: Pool): IRouter {
     "/console/organizations/:orgId/projects",
     requireOrg(pool, "viewer"),
     async (req, res) => {
-      const q = await pool.query(
-        `SELECT id::text, name, slug, platform, created_at,
-                cardinality(allowed_hosts) AS host_count
-         FROM projects WHERE organization_id = $1 ORDER BY name ASC`,
-        [req.params.orgId]
-      );
+      const orgId = req.params.orgId!;
+      const userId = req.consoleAuth!.sub;
+      const role = req.consoleMembership!.role;
+      const scoped = needsProjectAssignment(role) && !req.consoleAuth!.isPlatformAdmin;
+
+      const q = scoped
+        ? await pool.query(
+            `SELECT p.id::text, p.name, p.slug, p.platform, p.created_at,
+                    cardinality(p.allowed_hosts) AS host_count
+             FROM projects p
+             JOIN project_members pm ON pm.project_id = p.id AND pm.user_id = $2
+             WHERE p.organization_id = $1
+             ORDER BY p.name ASC`,
+            [orgId, userId]
+          )
+        : await pool.query(
+            `SELECT id::text, name, slug, platform, created_at,
+                    cardinality(allowed_hosts) AS host_count
+             FROM projects WHERE organization_id = $1 ORDER BY name ASC`,
+            [orgId]
+          );
+
       res.json(
         q.rows.map((row) => ({
           id: row.id,

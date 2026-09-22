@@ -65,6 +65,66 @@ export async function getMembership(
   return q.rows[0] ?? null;
 }
 
+/** Org admins/owners see every project; viewers only their assigned ones. */
+export function needsProjectAssignment(role: OrgRole | null | undefined): boolean {
+  return role === "viewer" || role === "member";
+}
+
+export async function userHasProjectAccess(
+  pool: Pool,
+  projectId: string,
+  userId: string
+): Promise<boolean> {
+  const q = await pool.query(
+    `SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2`,
+    [projectId, userId]
+  );
+  return q.rows.length > 0;
+}
+
+export async function listProjectIdsForUser(
+  pool: Pool,
+  userId: string,
+  orgId: string
+): Promise<string[]> {
+  const q = await pool.query<{ id: string }>(
+    `SELECT p.id::text
+     FROM project_members pm
+     JOIN projects p ON p.id = pm.project_id
+     WHERE pm.user_id = $1 AND p.organization_id = $2`,
+    [userId, orgId]
+  );
+  return q.rows.map((r) => r.id);
+}
+
+export async function setMemberProjects(
+  db: { query: Pool["query"] },
+  orgId: string,
+  userId: string,
+  projectIds: string[]
+): Promise<void> {
+  const valid = await db.query<{ id: string }>(
+    `SELECT id::text FROM projects
+     WHERE organization_id = $1 AND id = ANY($2::uuid[])`,
+    [orgId, projectIds]
+  );
+  const allowed = new Set(valid.rows.map((r) => r.id));
+  await db.query(
+    `DELETE FROM project_members pm
+     USING projects p
+     WHERE pm.project_id = p.id AND p.organization_id = $1 AND pm.user_id = $2`,
+    [orgId, userId]
+  );
+  for (const id of projectIds) {
+    if (!allowed.has(id)) continue;
+    await db.query(
+      `INSERT INTO project_members (project_id, user_id) VALUES ($1, $2)
+       ON CONFLICT DO NOTHING`,
+      [id, userId]
+    );
+  }
+}
+
 export async function getProject(
   pool: Pool,
   projectId: string

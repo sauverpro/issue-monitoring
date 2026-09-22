@@ -16,6 +16,75 @@ const MARKETPLACE_UPSTREAMS = [
   { slug: "RESOLVEIT", host: "resolveit.rw", label: "ResolveIt Ticketing API" },
 ];
 
+/**
+ * Org-scoped accounts seeded alongside the platform admin so every role can be
+ * signed in and exercised. Real members are provisioned from the UI, which
+ * forces a password change; these are ready to use immediately.
+ */
+const SEEDED_MEMBERS = [
+  {
+    role: "admin" as const,
+    name: "Organization admin",
+    emailEnv: "ORG_ADMIN_EMAIL",
+    passwordEnv: "ORG_ADMIN_PASSWORD",
+    defaultEmail: "orgadmin@ictchamber.rw",
+    defaultPassword: "OrgAdmin#2026",
+  },
+  {
+    role: "viewer" as const,
+    name: "Organization viewer",
+    emailEnv: "ORG_VIEWER_EMAIL",
+    passwordEnv: "ORG_VIEWER_PASSWORD",
+    defaultEmail: "viewer@ictchamber.rw",
+    defaultPassword: "Viewer#2026",
+  },
+];
+
+async function seedOrgMembers(
+  client: pg.Client,
+  orgId: string,
+  projectId: string
+): Promise<void> {
+  for (const m of SEEDED_MEMBERS) {
+    const email = (process.env[m.emailEnv] || m.defaultEmail).toLowerCase();
+    const password = process.env[m.passwordEnv] || m.defaultPassword;
+    const hash = await bcrypt.hash(password, 12);
+    const user = await client.query<{ id: string }>(
+      `INSERT INTO console_users (email, password_hash, name, must_change_password)
+       VALUES ($1, $2, $3, false)
+       ON CONFLICT (email) DO UPDATE SET
+         password_hash = EXCLUDED.password_hash,
+         name = EXCLUDED.name,
+         must_change_password = false
+       RETURNING id::text`,
+      [email, hash, m.name]
+    );
+    const userId = user.rows[0]!.id;
+    await client.query(
+      `INSERT INTO organization_members (organization_id, user_id, role)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (organization_id, user_id) DO UPDATE SET role = EXCLUDED.role`,
+      [orgId, userId, m.role]
+    );
+    if (m.role === "viewer") {
+      await client.query(
+        `INSERT INTO project_members (project_id, user_id)
+         VALUES ($1, $2)
+         ON CONFLICT DO NOTHING`,
+        [projectId, userId]
+      );
+    } else {
+      await client.query(
+        `DELETE FROM project_members pm
+         USING projects p
+         WHERE pm.project_id = p.id AND p.organization_id = $1 AND pm.user_id = $2`,
+        [orgId, userId]
+      );
+    }
+    console.log(`  ${m.role.padEnd(6)}  ${email}  /  ${password}`);
+  }
+}
+
 async function seedConsoleTenant(client: pg.Client): Promise<void> {
   const email = (
     process.env.CONSOLE_ADMIN_EMAIL ||
@@ -29,17 +98,15 @@ async function seedConsoleTenant(client: pg.Client): Promise<void> {
   }
 
   const hash = await bcrypt.hash(password, 12);
-  const user = await client.query<{ id: string }>(
-    `INSERT INTO console_users (email, password_hash, name, is_platform_admin)
-     VALUES ($1, $2, 'Platform admin', true)
+  await client.query(
+    `INSERT INTO console_users (email, password_hash, name, is_platform_admin, must_change_password)
+     VALUES ($1, $2, 'Platform admin', true, false)
      ON CONFLICT (email) DO UPDATE SET
        password_hash = EXCLUDED.password_hash,
-       is_platform_admin = true
-     RETURNING id::text`,
+       is_platform_admin = true,
+       must_change_password = false`,
     [email, hash]
   );
-  const userId = user.rows[0]!.id;
-  console.log("Console platform admin upserted:", email);
 
   const org = await client.query<{ id: string }>(
     `INSERT INTO organizations (name, slug)
@@ -48,12 +115,16 @@ async function seedConsoleTenant(client: pg.Client): Promise<void> {
      RETURNING id::text`
   );
   const orgId = org.rows[0]!.id;
+  // Platform admins are not org members — they access orgs via platform-admin bypass.
   await client.query(
-    `INSERT INTO organization_members (organization_id, user_id, role)
-     VALUES ($1, $2, 'owner')
-     ON CONFLICT (organization_id, user_id) DO UPDATE SET role = 'owner'`,
-    [orgId, userId]
+    `DELETE FROM organization_members m
+     USING console_users u
+     WHERE m.user_id = u.id AND u.is_platform_admin = true AND m.organization_id = $1`,
+    [orgId]
   );
+
+  console.log("Monitor accounts (email / password):");
+  console.log(`  super   ${email}  /  ${password}  (platform — not an org member)`);
 
   const project = await client.query<{ id: string }>(
     `INSERT INTO projects (organization_id, name, slug, platform)
@@ -63,6 +134,7 @@ async function seedConsoleTenant(client: pg.Client): Promise<void> {
     [orgId]
   );
   const projectId = project.rows[0]!.id;
+  await seedOrgMembers(client, orgId, projectId);
 
   for (const u of MARKETPLACE_UPSTREAMS) {
     await client.query(

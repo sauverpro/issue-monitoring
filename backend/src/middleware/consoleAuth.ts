@@ -1,7 +1,12 @@
 import type { RequestHandler } from "express";
 import type { Pool } from "pg";
 import type { OrgRole } from "../types/consoleAuth.js";
-import { getMembership, getProject } from "../services/tenancy.js";
+import {
+  getMembership,
+  getProject,
+  needsProjectAssignment,
+  userHasProjectAccess,
+} from "../services/tenancy.js";
 import { roleAtLeast } from "../services/orgRoles.js";
 
 export function requireOrg(pool: Pool, minRole: OrgRole = "viewer"): RequestHandler {
@@ -61,6 +66,13 @@ export function requireProject(pool: Pool, minRole: OrgRole = "viewer"): Request
         return;
       } else {
         req.consoleMembership = { orgId: project.organizationId, role: membership.role };
+        if (needsProjectAssignment(membership.role)) {
+          const ok = await userHasProjectAccess(pool, projectId, userId);
+          if (!ok) {
+            res.status(404).json({ error: "Project not found" });
+            return;
+          }
+        }
       }
       req.consoleProject = project;
       next();
