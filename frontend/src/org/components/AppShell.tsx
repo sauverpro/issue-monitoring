@@ -25,7 +25,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useAuth, orgHomePath } from "@/org/lib/auth";
+import { useAuth, orgHomePath, orgRoleFor, roleAtLeast } from "@/org/lib/auth";
 import { apiFetch } from "@/org/lib/api";
 import { RangeProvider } from "@/org/lib/range";
 import { TimeRangePicker } from "@/org/components/TimeRangePicker";
@@ -93,6 +93,9 @@ function AppShellInner({ children }: { children: ReactNode }) {
   const currentOrg: OrgListItem | null =
     auth.orgs.find((o) => o.id === orgId) ?? (orgId ? null : auth.org);
 
+  const role = orgRoleFor(auth, orgId);
+  const canManage = roleAtLeast(role, "admin");
+
   const home = orgHomePath(currentOrg ?? auth.org);
   const projectBase = orgId && projectId ? `/orgs/${orgId}/projects/${projectId}` : null;
 
@@ -121,7 +124,12 @@ function AppShellInner({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   const orgNav: NavItem[] = orgId
-    ? [{ to: `/orgs/${orgId}`, label: "Organization", icon: FolderKanban, end: true }]
+    ? [
+        { to: `/orgs/${orgId}`, label: "Organization", icon: FolderKanban, end: true },
+        ...(canManage
+          ? [{ to: `/orgs/${orgId}/members`, label: "Members", icon: Users }]
+          : []),
+      ]
     : [];
 
   const monitorNav: NavItem[] = projectBase
@@ -152,12 +160,14 @@ function AppShellInner({ children }: { children: ReactNode }) {
       ]
     : [];
 
-  const manageNav: NavItem[] = projectBase
-    ? [
-        { to: `${projectBase}/integration`, label: "Integrations", icon: Plug },
-        { to: `${projectBase}/settings`, label: "Settings", icon: Settings },
-      ]
-    : [];
+  // Integrations exposes ingest keys and Settings mutates the project, so both are admin-only.
+  const manageNav: NavItem[] =
+    projectBase && canManage
+      ? [
+          { to: `${projectBase}/integration`, label: "Integrations", icon: Plug },
+          { to: `${projectBase}/settings`, label: "Settings", icon: Settings },
+        ]
+      : [];
 
   const platformNav: NavItem[] = auth.isPlatformAdmin
     ? [

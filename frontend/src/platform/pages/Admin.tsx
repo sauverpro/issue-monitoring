@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { apiFetch } from "@/org/lib/api";
 import { PageHeader, Panel } from "@/org/components/ui";
+import { TempPasswordNotice, type Provisioned } from "@/org/components/TempPasswordNotice";
 
 type Org = {
   id: string;
@@ -19,6 +20,7 @@ export function PlatformAdminPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [provisioned, setProvisioned] = useState<Provisioned | null>(null);
 
   async function load() {
     const list = await apiFetch<Org[]>("/console/admin/organizations");
@@ -55,13 +57,22 @@ export function PlatformAdminPage() {
     if (!inviteOrgId) return;
     setError(null);
     setNotice(null);
+    setProvisioned(null);
     try {
-      await apiFetch(`/console/organizations/${inviteOrgId}/members`, {
+      const res = await apiFetch<{
+        email: string;
+        created: boolean;
+        temporaryPassword: string | null;
+      }>(`/console/organizations/${inviteOrgId}/members`, {
         method: "POST",
-        json: { email: inviteEmail, role: "owner" },
+        json: { email: inviteEmail, role: "admin" },
       });
       setInviteEmail("");
-      setNotice(`Invited ${inviteEmail} as owner. They sign in at /login on this same app.`);
+      if (res.created && res.temporaryPassword) {
+        setProvisioned({ email: res.email, temporaryPassword: res.temporaryPassword });
+      } else {
+        setNotice(`${res.email} is now an organization admin. They sign in at /login.`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invite failed");
     }
@@ -72,10 +83,13 @@ export function PlatformAdminPage() {
       <PageHeader
         eyebrow="Platform admin"
         title="Organizations"
-        description="Create tenants, invite the first owner, and suspend orgs. Usage is last 7 days of SDK events. Owners manage projects in the organization workspace on this same deployment."
+        description="Create tenants and invite the first organization admin. Platform admins are not members of those orgs. Admins manage projects and viewers in the organization workspace."
       />
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
       {notice && <p className="mb-3 text-sm text-emerald-700 dark:text-emerald-400">{notice}</p>}
+      {provisioned && (
+        <TempPasswordNotice value={provisioned} onDismiss={() => setProvisioned(null)} />
+      )}
       <form className="mb-4 flex max-w-lg gap-2" onSubmit={(e) => void onCreate(e)}>
         <input
           className="input flex-1"
@@ -103,7 +117,7 @@ export function PlatformAdminPage() {
           </select>
         </label>
         <label className="min-w-[12rem] flex-1 text-xs font-medium text-zinc-500">
-          Invite owner (registered email)
+          Organization admin email
           <input
             className="input mt-1"
             type="email"

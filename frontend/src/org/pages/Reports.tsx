@@ -4,11 +4,15 @@ import { clsx } from "clsx";
 import {
   Activity,
   AlertTriangle,
+  CalendarRange,
+  ChevronDown,
   Download,
   FileDown,
   FileText,
+  Filter,
   Gauge,
   Globe,
+  Layers,
   MousePointerClick,
   Share2,
   Users,
@@ -189,7 +193,9 @@ export function ReportsPage() {
   const [copied, setCopied] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [sections, setSections] = useState<SectionFlags>(DEFAULT_SECTIONS);
+  const [openFilter, setOpenFilter] = useState<"period" | "sections" | "export" | null>(null);
   const reportType = presetToReportType(range.preset);
+  const selectedCount = SECTION_KEYS.filter((k) => sections[k]).length;
 
   function toggleSection(key: SectionKey) {
     setSections((s) => ({ ...s, [key]: !s[key] }));
@@ -331,57 +337,41 @@ export function ReportsPage() {
     <div>
       <PageHeader
         title="Reports"
-        description="Generate management-ready reports for the selected period."
+        description="Explore analytics for the selected period, then expand filters to shape and export a PDF."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <TimeRangePicker />
-            <button type="button" className="btn-secondary" onClick={() => void share()}>
-              <Share2 className="mr-1.5 h-3.5 w-3.5" />
-              {copied ? "Copied" : "Share report"}
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={exporting}
-              onClick={() => void download("daily")}
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              Export CSV
-            </button>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={exporting}
-              onClick={() => void downloadPdf()}
-            >
-              <FileDown className="mr-1.5 h-3.5 w-3.5" />
-              Export PDF
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={exporting}
-              onClick={() => void downloadExecutivePdf()}
-              title="A narrative, management-facing PDF report"
-            >
-              <FileText className="mr-1.5 h-3.5 w-3.5" />
-              Executive Report
-            </button>
-          </div>
+          <button type="button" className="btn-secondary" onClick={() => void share()}>
+            <Share2 className="mr-1.5 h-3.5 w-3.5" />
+            {copied ? "Link copied" : "Share"}
+          </button>
         }
       />
-      <ReportGenerator
+
+      <ReportFilters
         from={from}
         to={to}
-        exporting={exporting}
         type={reportType}
         onTypeChange={setReportType}
         sections={sections}
+        selectedCount={selectedCount}
         onToggleSection={toggleSection}
-        onPreview={() => setTab("overview")}
+        onSelectAllSections={() =>
+          setSections(Object.fromEntries(SECTION_KEYS.map((k) => [k, true])) as SectionFlags)
+        }
+        onClearSections={() =>
+          setSections(Object.fromEntries(SECTION_KEYS.map((k) => [k, false])) as SectionFlags)
+        }
+        open={openFilter}
+        onOpenChange={setOpenFilter}
+        exporting={exporting}
+        onPreview={() => {
+          setTab("overview");
+          setOpenFilter(null);
+        }}
         onPdf={() => void downloadPdf()}
         onExecutivePdf={() => void downloadExecutivePdf()}
+        onCsv={() => void download("daily")}
       />
+
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
       <div className="mb-6 flex gap-1 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800">
         {TABS.map((t) => (
@@ -390,7 +380,7 @@ export function ReportsPage() {
             type="button"
             onClick={() => setTab(t.id)}
             className={clsx(
-              "whitespace-nowrap px-3 py-2 text-sm font-medium",
+              "whitespace-nowrap px-3 py-2 text-sm font-medium transition-colors",
               tab === t.id
                 ? "border-b-2 border-indigo-500 text-indigo-600 dark:text-indigo-400"
                 : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
@@ -988,112 +978,324 @@ function RetentionTab({ projectId, query }: { projectId: string; query: URLSearc
   );
 }
 
-function ReportGenerator({
+const SECTION_OPTIONS: { key: SectionKey; label: string; hint: string }[] = [
+  { key: "behavior", label: "User Behavior", hint: "Screens, actions, engagement" },
+  { key: "journeys", label: "User Journeys", hint: "Paths and funnel steps" },
+  { key: "health", label: "System Health", hint: "Availability and latency" },
+  { key: "apis", label: "API Performance", hint: "Endpoints and outcomes" },
+  { key: "errors", label: "Errors", hint: "Failures by type" },
+  { key: "users", label: "Affected Users", hint: "Who hit problems" },
+  { key: "recommendations", label: "Recommendations", hint: "Suggested follow-ups" },
+];
+
+const TYPE_OPTIONS: { id: ReportType; label: string; hint: string }[] = [
+  { id: "daily", label: "Daily", hint: "Today" },
+  { id: "weekly", label: "Weekly", hint: "Last 7 days" },
+  { id: "monthly", label: "Monthly", hint: "This month" },
+  { id: "custom", label: "Custom", hint: "Pick dates" },
+];
+
+function FilterChip({
+  active,
+  icon: Icon,
+  label,
+  value,
+  onClick,
+}: {
+  active: boolean;
+  icon: typeof Filter;
+  label: string;
+  value: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={active}
+      className={clsx(
+        "group flex min-w-0 items-center gap-2 rounded-xl border px-3 py-2 text-left transition-all",
+        active
+          ? "border-indigo-500 bg-indigo-50 shadow-sm ring-1 ring-indigo-500/30 dark:border-indigo-400 dark:bg-indigo-500/10"
+          : "border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700"
+      )}
+    >
+      <span
+        className={clsx(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+          active
+            ? "bg-indigo-500/15 text-indigo-600 dark:text-indigo-300"
+            : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"
+        )}
+      >
+        <Icon className="h-4 w-4" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          {label}
+        </span>
+        <span className="block truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+          {value}
+        </span>
+      </span>
+      <ChevronDown
+        className={clsx(
+          "h-4 w-4 shrink-0 text-zinc-400 transition-transform duration-200",
+          active && "rotate-180 text-indigo-500"
+        )}
+      />
+    </button>
+  );
+}
+
+function ReportFilters({
   from,
   to,
-  exporting,
   type,
   onTypeChange,
   sections,
+  selectedCount,
   onToggleSection,
+  onSelectAllSections,
+  onClearSections,
+  open,
+  onOpenChange,
+  exporting,
   onPreview,
   onPdf,
   onExecutivePdf,
+  onCsv,
 }: {
   from: string;
   to: string;
-  exporting: boolean;
   type: ReportType;
   onTypeChange: (type: ReportType) => void;
   sections: SectionFlags;
+  selectedCount: number;
   onToggleSection: (key: SectionKey) => void;
+  onSelectAllSections: () => void;
+  onClearSections: () => void;
+  open: "period" | "sections" | "export" | null;
+  onOpenChange: (v: "period" | "sections" | "export" | null) => void;
+  exporting: boolean;
   onPreview: () => void;
   onPdf: () => void;
   onExecutivePdf: () => void;
+  onCsv: () => void;
 }) {
+  function toggle(panel: "period" | "sections" | "export") {
+    onOpenChange(open === panel ? null : panel);
+  }
+
+  const typeLabel = TYPE_OPTIONS.find((t) => t.id === type)?.label ?? "Custom";
+  const rangeLabel = from === to ? from : `${from} → ${to}`;
+
   return (
-    <Panel className="mb-6">
-      <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium dark:border-zinc-800">
-        Generate report
+    <div className="mb-6 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+      <div className="flex flex-col gap-3 border-b border-zinc-100 p-3 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between sm:px-4">
+        <div className="flex items-center gap-2 text-xs font-medium text-zinc-500">
+          <Filter className="h-3.5 w-3.5" />
+          Filters
+          <span className="rounded-full bg-zinc-100 px-2 py-0.5 tabular-nums text-[10px] dark:bg-zinc-800">
+            {selectedCount}/{SECTION_KEYS.length} sections
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <TimeRangePicker />
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={exporting || selectedCount === 0}
+            onClick={onPdf}
+          >
+            <FileDown className="mr-1.5 h-3.5 w-3.5" />
+            {exporting ? "Exporting…" : "Generate PDF"}
+          </button>
+        </div>
       </div>
-      <div className="grid gap-6 p-5 lg:grid-cols-2">
-        <div className="space-y-4">
-          <fieldset>
-            <legend className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">
-              Report type
-            </legend>
-            <div className="space-y-2 text-sm">
-              {(
-                [
-                  ["daily", "Daily"],
-                  ["weekly", "Weekly"],
-                  ["monthly", "Monthly"],
-                  ["custom", "Custom"],
-                ] as const
-              ).map(([id, label]) => (
-                <label key={id} className="flex items-center gap-2">
-                  <input
-                    type="radio"
-                    name="rtype"
-                    checked={type === id}
-                    onChange={() => onTypeChange(id)}
-                  />
-                  {label}
-                </label>
-              ))}
+
+      <div className="grid gap-2 p-3 sm:grid-cols-3 sm:px-4 sm:pb-4">
+        <FilterChip
+          active={open === "period"}
+          icon={CalendarRange}
+          label="Period"
+          value={`${typeLabel} · ${rangeLabel}`}
+          onClick={() => toggle("period")}
+        />
+        <FilterChip
+          active={open === "sections"}
+          icon={Layers}
+          label="Include in PDF"
+          value={
+            selectedCount === SECTION_KEYS.length
+              ? "All sections"
+              : selectedCount === 0
+                ? "None selected"
+                : `${selectedCount} sections`
+          }
+          onClick={() => toggle("sections")}
+        />
+        <FilterChip
+          active={open === "export"}
+          icon={Download}
+          label="Export"
+          value="PDF, executive, CSV"
+          onClick={() => toggle("export")}
+        />
+      </div>
+
+      <div
+        className={clsx(
+          "grid transition-[grid-template-rows] duration-300 ease-out",
+          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+        )}
+      >
+        <div className="overflow-hidden">
+          {open === "period" && (
+            <div className="border-t border-zinc-100 px-4 py-4 dark:border-zinc-800">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Report type
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {TYPE_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.id}
+                    className={clsx(
+                      "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition",
+                      type === opt.id
+                        ? "border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500/20 dark:border-indigo-400 dark:bg-indigo-500/10"
+                        : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800"
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      className="mt-1"
+                      name="rtype"
+                      checked={type === opt.id}
+                      onChange={() => onTypeChange(opt.id)}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium">{opt.label}</span>
+                      <span className="text-xs text-zinc-500">{opt.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-zinc-50 px-4 py-3 dark:bg-zinc-800/50">
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    Active range
+                  </p>
+                  <p className="text-sm font-medium tabular-nums">{rangeLabel}</p>
+                </div>
+                <TimeRangePicker />
+              </div>
             </div>
-          </fieldset>
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Date range</p>
-            <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              {from} → {to}
-            </p>
-          </div>
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Include</p>
-          <div className="grid gap-2 text-sm sm:grid-cols-2">
-            {(
-              [
-                ["behavior", "User Behavior"],
-                ["journeys", "User Journeys"],
-                ["health", "System Health"],
-                ["apis", "API Performance"],
-                ["errors", "Errors"],
-                ["users", "Affected Users"],
-                ["recommendations", "Recommendations"],
-              ] as const
-            ).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={sections[key]}
-                  onChange={() => onToggleSection(key)}
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-          <div className="mt-6 flex flex-wrap gap-2">
-            <button type="button" className="btn-secondary" onClick={onPreview}>
-              Preview
-            </button>
-            <button type="button" className="btn-primary" disabled={exporting} onClick={onPdf}>
-              Generate PDF
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              disabled={exporting}
-              onClick={onExecutivePdf}
-              title="A narrative, management-facing PDF report"
-            >
-              Executive Report
-            </button>
-          </div>
+          )}
+
+          {open === "sections" && (
+            <div className="border-t border-zinc-100 px-4 py-4 dark:border-zinc-800">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                  Sections in generated PDF
+                </p>
+                <div className="flex gap-2 text-xs">
+                  <button
+                    type="button"
+                    className="font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                    onClick={onSelectAllSections}
+                  >
+                    Select all
+                  </button>
+                  <span className="text-zinc-300">·</span>
+                  <button
+                    type="button"
+                    className="font-medium text-zinc-500 hover:underline"
+                    onClick={onClearSections}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {SECTION_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.key}
+                    className={clsx(
+                      "flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition",
+                      sections[opt.key]
+                        ? "border-indigo-500/60 bg-indigo-50/80 dark:border-indigo-400/50 dark:bg-indigo-500/10"
+                        : "border-zinc-200 opacity-70 hover:opacity-100 dark:border-zinc-800"
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={sections[opt.key]}
+                      onChange={() => onToggleSection(opt.key)}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium">{opt.label}</span>
+                      <span className="text-xs text-zinc-500">{opt.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {open === "export" && (
+            <div className="border-t border-zinc-100 px-4 py-4 dark:border-zinc-800">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Download options
+              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <button
+                  type="button"
+                  className="flex flex-col items-start gap-2 rounded-xl border border-indigo-500 bg-indigo-50 p-4 text-left transition hover:bg-indigo-100/80 disabled:opacity-50 dark:border-indigo-400 dark:bg-indigo-500/10"
+                  disabled={exporting || selectedCount === 0}
+                  onClick={onPdf}
+                >
+                  <FileDown className="h-5 w-5 text-indigo-600 dark:text-indigo-300" />
+                  <span className="text-sm font-semibold">Generate PDF</span>
+                  <span className="text-xs text-zinc-500">
+                    Formatted report with {selectedCount} selected section
+                    {selectedCount === 1 ? "" : "s"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="flex flex-col items-start gap-2 rounded-xl border border-zinc-200 p-4 text-left transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50"
+                  disabled={exporting}
+                  onClick={onExecutivePdf}
+                >
+                  <FileText className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
+                  <span className="text-sm font-semibold">Executive report</span>
+                  <span className="text-xs text-zinc-500">
+                    Narrative summary for management
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="flex flex-col items-start gap-2 rounded-xl border border-zinc-200 p-4 text-left transition hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-800/50"
+                  disabled={exporting}
+                  onClick={onCsv}
+                >
+                  <Download className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
+                  <span className="text-sm font-semibold">Export CSV</span>
+                  <span className="text-xs text-zinc-500">Daily activity spreadsheet</span>
+                </button>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button type="button" className="btn-secondary" onClick={onPreview}>
+                  Preview overview
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-    </Panel>
+    </div>
   );
 }
 
@@ -1114,7 +1316,7 @@ function CustomTab({
         <div className="space-y-4 p-5">
           <p className="text-sm text-zinc-500">
             A formatted overview of KPIs, activity, APIs, errors, funnels and retention for the date range
-            above.
+            above. Use the Include filter to choose sections.
           </p>
           <button type="button" className="btn-primary" disabled={exporting} onClick={onDownloadPdf}>
             <FileDown className="mr-1.5 h-3.5 w-3.5" />
@@ -1149,3 +1351,4 @@ function CustomTab({
     </div>
   );
 }
+

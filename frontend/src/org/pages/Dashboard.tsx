@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { RefreshCw } from "lucide-react";
 import { clsx } from "clsx";
 import { apiFetch } from "@/org/lib/api";
+import { useAuth } from "@/org/lib/auth";
 import { useRange } from "@/org/lib/range";
 import { Delta, problemKey } from "@/org/lib/metrics";
 import type { FunnelStep, ProblemRow } from "@/org/types";
@@ -82,9 +83,11 @@ const STATUS_PILL: Record<ApiOpsRow["status"], string> = {
 
 export function DashboardPage() {
   const { orgId, projectId } = useParams();
+  const { auth } = useAuth();
   const { range } = useRange();
   const [data, setData] = useState<Dashboard | null>(null);
   const [projectName, setProjectName] = useState("Project");
+  const [orgName, setOrgName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -94,17 +97,25 @@ export function DashboardPage() {
     try {
       const [dash, project] = await Promise.all([
         apiFetch<Dashboard>(`/console/projects/${projectId}/dashboard?${range.query}`),
-        apiFetch<{ name: string }>(`/console/projects/${projectId}`),
+        apiFetch<{ name: string; organizationName?: string }>(
+          `/console/projects/${projectId}`
+        ),
       ]);
       setData(dash);
       setProjectName(project.name);
+      setOrgName(
+        project.organizationName ??
+          auth.orgs.find((o) => o.id === orgId)?.name ??
+          auth.org?.name ??
+          null
+      );
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed");
     } finally {
       setRefreshing(false);
     }
-  }, [projectId, range.query]);
+  }, [projectId, range.query, orgId, auth.orgs, auth.org?.name]);
 
   useEffect(() => {
     void load();
@@ -126,9 +137,13 @@ export function DashboardPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Monitor"
+        eyebrow={orgName ?? "Monitor"}
         title="Overview"
-        description="How healthy is your application today?"
+        description={
+          orgName
+            ? `${orgName} · ${projectName} · How healthy is your application today?`
+            : "How healthy is your application today?"
+        }
         actions={
           <>
             <span className="hidden text-sm font-medium text-zinc-600 dark:text-zinc-300 sm:inline">

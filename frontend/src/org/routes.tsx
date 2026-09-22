@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { Navigate, Route, useLocation, useParams } from "react-router-dom";
-import { useAuth } from "@/org/lib/auth";
+import { orgRoleFor, roleAtLeast, useAuth } from "@/org/lib/auth";
+import type { OrgRole } from "@/org/types";
 import { AppShell } from "@/org/components/AppShell";
 import { LoginPage } from "@/org/pages/Login";
-import { RegisterPage } from "@/org/pages/Register";
+import { ChangePasswordPage } from "@/org/pages/ChangePassword";
 import { OrgsPage } from "@/org/pages/Orgs";
 import { OrgHomePage } from "@/org/pages/OrgHome";
+import { MembersPage } from "@/org/pages/Members";
 import { DashboardPage } from "@/org/pages/Dashboard";
 import { UserJourneyPage } from "@/org/pages/UserJourney";
 import { UsersPage } from "@/org/pages/Users";
@@ -33,7 +35,29 @@ function OrgProtected({ children }: { children: ReactNode }) {
   if (!auth.token) {
     return <Navigate to="/login" replace state={{ from: loc }} />;
   }
+  if (auth.mustChangePassword) {
+    return <Navigate to="/change-password" replace />;
+  }
   return <AppShell>{children}</AppShell>;
+}
+
+/**
+ * Gates org-management surfaces (settings, integration keys, member admin).
+ * Viewers are bounced to the project overview instead of hitting a 403 page.
+ */
+function RequireRole({ min, children }: { min: OrgRole; children: ReactNode }) {
+  const { auth } = useAuth();
+  const { orgId, projectId } = useParams();
+  if (!auth.ready) {
+    return <p className="p-8 text-zinc-500">Loading…</p>;
+  }
+  if (!roleAtLeast(orgRoleFor(auth, orgId), min)) {
+    const fallback = projectId
+      ? `/orgs/${orgId}/projects/${projectId}/overview`
+      : `/orgs/${orgId}`;
+    return <Navigate to={fallback} replace />;
+  }
+  return <>{children}</>;
 }
 
 /** Platform-admin-only routes (merged former console app). */
@@ -71,7 +95,8 @@ function LegacyRedirect({ to }: { to: "overview" | "users" | "dashboard" | "jour
 export const orgRoutes = (
   <>
     <Route path="/login" element={<LoginPage />} />
-    <Route path="/register" element={<RegisterPage />} />
+    <Route path="/change-password" element={<ChangePasswordPage />} />
+    <Route path="/register" element={<Navigate to="/login" replace />} />
     <Route
       path="/platform"
       element={
@@ -101,6 +126,16 @@ export const orgRoutes = (
       element={
         <OrgProtected>
           <OrgHomePage />
+        </OrgProtected>
+      }
+    />
+    <Route
+      path="/orgs/:orgId/members"
+      element={
+        <OrgProtected>
+          <RequireRole min="admin">
+            <MembersPage />
+          </RequireRole>
         </OrgProtected>
       }
     />
@@ -244,7 +279,9 @@ export const orgRoutes = (
       path="/orgs/:orgId/projects/:projectId/settings"
       element={
         <OrgProtected>
-          <SettingsPage />
+          <RequireRole min="admin">
+            <SettingsPage />
+          </RequireRole>
         </OrgProtected>
       }
     />
@@ -252,7 +289,9 @@ export const orgRoutes = (
       path="/orgs/:orgId/projects/:projectId/integration"
       element={
         <OrgProtected>
-          <IntegrationPage />
+          <RequireRole min="admin">
+            <IntegrationPage />
+          </RequireRole>
         </OrgProtected>
       }
     />

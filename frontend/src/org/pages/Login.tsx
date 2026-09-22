@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Activity } from "lucide-react";
 import { useAuth, postLoginPath } from "@/org/lib/auth";
 import { ThemeToggle } from "@/org/components/ThemeToggle";
@@ -74,14 +74,9 @@ export function LoginPage() {
           <button disabled={busy} className="btn-primary w-full py-2.5">
             {busy ? "Signing in…" : "Sign in"}
           </button>
-          <p className="text-center text-sm text-zinc-500">
-            No account?{" "}
-            <Link className="font-medium text-indigo-600 dark:text-indigo-400" to="/register">
-              Register
-            </Link>
-          </p>
           <p className="text-center text-xs text-zinc-400">
-            Platform admins land on Organizations (/platform). Org members land in their workspace.
+            Accounts are created by your organization admin. Ask them for an invite if you do not
+            have one yet.
           </p>
         </form>
       </div>
