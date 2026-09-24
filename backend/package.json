@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/index.js",
+    "dev": "node api.js && tsx watch src/index.ts",
+    "build": "node api.js && tsc -p tsconfig.build.json",
+    "start": "node api.js && node dist/index.js",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:dev": "tsx scripts/seed-dev-data.ts",
