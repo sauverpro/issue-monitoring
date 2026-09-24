@@ -34,6 +34,8 @@ import {
   getProjectDashboard,
   getProjectPerformance,
   getProjectProblems,
+  getApiStatusAffectedUsers,
+  getApiStatusExplorer,
   getReportBehavior,
   parseProblemKey,
 } from "../services/monitorInsights.js";
@@ -454,6 +456,47 @@ export function consoleProjectsRouter(pool: Pool): IRouter {
     async (req, res) => {
       const range = reportQueryRange(req.query);
       res.json(await getProjectProblems(pool, req.params.projectId!, range));
+    }
+  );
+
+  /** Interactive API status board (success + failures + HTTP 0). */
+  r.get(
+    "/console/projects/:projectId/api-status",
+    requireProject(pool, "viewer"),
+    async (req, res) => {
+      const range = reportQueryRange(req.query);
+      res.json(await getApiStatusExplorer(pool, req.params.projectId!, range));
+    }
+  );
+
+  r.get(
+    "/console/projects/:projectId/api-status/users",
+    requireProject(pool, "viewer"),
+    async (req, res) => {
+      const range = reportQueryRange(req.query);
+      const cls = typeof req.query.resultClass === "string" ? req.query.resultClass : undefined;
+      const status0 = req.query.status0 === "1" || req.query.status0 === "true";
+      const statusRaw = typeof req.query.statusCode === "string" ? req.query.statusCode : undefined;
+      const statusCode =
+        statusRaw === undefined ? undefined : statusRaw === "" ? null : Number(statusRaw);
+      res.json(
+        await getApiStatusAffectedUsers(pool, req.params.projectId!, range, {
+          resultClass:
+            cls === "client_failure" ||
+            cls === "server_error" ||
+            cls === "network" ||
+            cls === "success"
+              ? cls
+              : undefined,
+          status0,
+          service: typeof req.query.service === "string" ? req.query.service : undefined,
+          method: typeof req.query.method === "string" ? req.query.method : undefined,
+          path: typeof req.query.path === "string" ? req.query.path : undefined,
+          statusCode: Number.isFinite(statusCode as number) || statusCode === null ? statusCode : undefined,
+          includeSuccess: req.query.includeSuccess === "1" || req.query.includeSuccess === "true",
+          search: typeof req.query.search === "string" ? req.query.search : undefined,
+        })
+      );
     }
   );
 

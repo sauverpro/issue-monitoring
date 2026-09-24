@@ -7,6 +7,8 @@ import { listProjectUpstreams } from "./tenancy.js";
 import { matchUpstreamSlug, normalizeHost } from "./monitorHosts.js";
 
 const USER_KEY_SQL = `COALESCE(NULLIF(TRIM(user_id), ''), NULLIF(TRIM(user_email), ''))`;
+/** Same definition as Overview / Users: identified people only — never a session id. */
+const IDENTIFIED_USERS_SQL = `COUNT(DISTINCT ${USER_KEY_SQL})`;
 
 /** Pathname of request_url / endpoint, query string stripped. */
 export const EVENT_PATH_SQL = `COALESCE(
@@ -261,7 +263,7 @@ async function loadFailureGroups(pool: Pool, projectId: string, range: DateRange
             MIN(failure_reason) AS failure_reason,
             ${resultClass} AS result_class,
             COUNT(*)::text AS occurrences,
-            COUNT(DISTINCT COALESCE(${USER_KEY_SQL}, session_id))::text AS users_affected,
+            ${IDENTIFIED_USERS_SQL}::text AS users_affected,
             COUNT(DISTINCT session_id)::text AS sessions_affected,
             MIN(occurred_at) AS first_seen,
             MAX(occurred_at) AS last_seen,
@@ -378,7 +380,7 @@ async function problemSummaryStats(pool: Pool, projectId: string, range: DateRan
   }>(
     `SELECT
        COUNT(*) FILTER (WHERE (${resultClass}) IN ('client_failure','server_error','network'))::text AS errors,
-       COUNT(DISTINCT COALESCE(${USER_KEY_SQL}, session_id))
+       ${IDENTIFIED_USERS_SQL}
          FILTER (WHERE (${resultClass}) IN ('client_failure','server_error','network'))::text AS users,
        COUNT(*) FILTER (WHERE (${resultClass}) = 'client_failure')::text AS client_failure,
        COUNT(*) FILTER (WHERE (${resultClass}) = 'server_error')::text AS server_error,
@@ -460,7 +462,7 @@ export async function getProblemDetail(
     failure_reason: string | null;
   }>(
     `SELECT COUNT(*)::text AS occurrences,
-            COUNT(DISTINCT COALESCE(${USER_KEY_SQL}, session_id))::text AS users_affected,
+            ${IDENTIFIED_USERS_SQL}::text AS users_affected,
             COUNT(DISTINCT session_id)::text AS sessions_affected,
             MIN(occurred_at) AS first_seen,
             MAX(occurred_at) AS last_seen,
@@ -615,6 +617,493 @@ export async function getProblemAffectedUsers(
       sessions: Number(r.sessions),
       lastSeen: r.last_seen.toISOString(),
       sampleSessionId: r.sample_session_id,
+    })),
+  };
+}
+
+/**
+ * Full API request status board: success + failure classes, with HTTP 0 called out.
+ * Used by the interactive Errors / API status explorer.
+ */
+export async function getApiStatusExplorer(pool: Pool, projectId: string, range: DateRange) {
+  const resultClass = httpResultClassSql();
+  const serviceSql = `UPPER(COALESCE(NULLIF(TRIM(service), ''), 'OTHER'))`;
+
+  const [summaryQ, byServiceQ, byServiceClassQ, status0ByServiceQ, endpointsQ, status0Q, usersQ] =
+    await Promise.all([
+    pool.query<{ cls: string; n: string; users: string }>(
+      `SELECT ${resultClass} AS cls,
+              COUNT(*)::text AS n,
+              ${IDENTIFIED_USERS_SQL}::text AS users
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+       GROUP BY 1`,
+      [projectId, range.from, range.to]
+    ),
+    pool.query<{ service: string; n: string; users: string }>(
+      `SELECT ${serviceSql} AS service,
+              COUNT(*)::text AS n,
+              ${IDENTIFIED_USERS_SQL}::text AS users
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+       GROUP BY 1
+       ORDER BY COUNT(*) DESC`,
+      [projectId, range.from, range.to]
+    ),
+    pool.query<{ service: string; cls: string; n: string; users: string }>(
+      `SELECT ${serviceSql} AS service,
+              ${resultClass} AS cls,
+              COUNT(*)::text AS n,
+              ${IDENTIFIED_USERS_SQL}::text AS users
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+       GROUP BY 1, 2`,
+      [projectId, range.from, range.to]
+    ),
+    pool.query<{ service: string; n: string; users: string }>(
+      `SELECT ${serviceSql} AS service,
+              COUNT(*)::text AS n,
+              ${IDENTIFIED_USERS_SQL}::text AS users
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+         AND COALESCE(status_code, 0) = 0
+         AND (${resultClass}) IN ('client_failure', 'server_error', 'network')
+       GROUP BY 1`,
+      [projectId, range.from, range.to]
+    ),
+    pool.query<{
+      method: string | null;
+      path: string;
+      status_code: number | null;
+      result_class: string;
+      service: string;
+      occurrences: string;
+      users_affected: string;
+      sessions_affected: string;
+      first_seen: Date;
+      last_seen: Date;
+      avg_latency: string | null;
+    }>(
+      `SELECT COALESCE(http_method, 'GET') AS method,
+              ${EVENT_PATH_SQL} AS path,
+              status_code,
+              ${resultClass} AS result_class,
+              ${serviceSql} AS service,
+              COUNT(*)::text AS occurrences,
+              ${IDENTIFIED_USERS_SQL}::text AS users_affected,
+              COUNT(DISTINCT session_id)::text AS sessions_affected,
+              MIN(occurred_at) AS first_seen,
+              MAX(occurred_at) AS last_seen,
+              AVG(latency_ms)::text AS avg_latency
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+       GROUP BY COALESCE(http_method, 'GET'), ${EVENT_PATH_SQL}, status_code, ${resultClass}, ${serviceSql}
+       ORDER BY COUNT(*) DESC
+       LIMIT 200`,
+      [projectId, range.from, range.to]
+    ),
+    pool.query<{ n: string; users: string }>(
+      `SELECT COUNT(*)::text AS n,
+              ${IDENTIFIED_USERS_SQL}::text AS users
+       FROM api_events
+       WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+         AND COALESCE(status_code, 0) = 0
+         AND (${resultClass}) IN ('client_failure', 'server_error', 'network')`,
+      [projectId, range.from, range.to]
+    ),
+    // Top requesters per endpoint group (any outcome — success or failure)
+    pool.query<{
+      method: string | null;
+      path: string;
+      status_code: number | null;
+      result_class: string;
+      service: string;
+      user_key: string | null;
+      user_id: string | null;
+      email: string | null;
+      requests: string;
+      sessions: string;
+      last_seen: Date;
+      sample_session_id: string | null;
+      rn: string;
+    }>(
+      `SELECT * FROM (
+         SELECT COALESCE(http_method, 'GET') AS method,
+                ${EVENT_PATH_SQL} AS path,
+                status_code,
+                ${resultClass} AS result_class,
+                ${serviceSql} AS service,
+                ${USER_KEY_SQL} AS user_key,
+                MAX(user_id) FILTER (WHERE user_id IS NOT NULL AND TRIM(user_id) <> '') AS user_id,
+                MAX(user_email) FILTER (WHERE user_email IS NOT NULL AND TRIM(user_email) <> '') AS email,
+                COUNT(*)::text AS requests,
+                COUNT(DISTINCT session_id)::text AS sessions,
+                MAX(occurred_at) AS last_seen,
+                (ARRAY_AGG(session_id ORDER BY occurred_at DESC)
+                  FILTER (WHERE session_id IS NOT NULL AND TRIM(session_id) <> ''))[1] AS sample_session_id,
+                ROW_NUMBER() OVER (
+                  PARTITION BY COALESCE(http_method, 'GET'), ${EVENT_PATH_SQL}, status_code,
+                               ${resultClass}, ${serviceSql}
+                  ORDER BY COUNT(*) DESC, MAX(occurred_at) DESC
+                )::text AS rn
+         FROM api_events
+         WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+           AND ${USER_KEY_SQL} IS NOT NULL
+         GROUP BY COALESCE(http_method, 'GET'), ${EVENT_PATH_SQL}, status_code, ${resultClass},
+                  ${serviceSql}, ${USER_KEY_SQL}
+       ) ranked
+       WHERE rn::int <= 8`,
+      [projectId, range.from, range.to]
+    ),
+  ]);
+
+  const byClass = {
+    success: 0,
+    clientFailure: 0,
+    serverError: 0,
+    network: 0,
+  };
+  const usersByClass = {
+    success: 0,
+    clientFailure: 0,
+    serverError: 0,
+    network: 0,
+  };
+  for (const r of summaryQ.rows) {
+    const n = Number(r.n);
+    const u = Number(r.users);
+    if (r.cls === "success") {
+      byClass.success = n;
+      usersByClass.success = u;
+    } else if (r.cls === "client_failure") {
+      byClass.clientFailure = n;
+      usersByClass.clientFailure = u;
+    } else if (r.cls === "server_error") {
+      byClass.serverError = n;
+      usersByClass.serverError = u;
+    } else if (r.cls === "network") {
+      byClass.network = n;
+      usersByClass.network = u;
+    }
+  }
+
+  type ServiceStat = {
+    service: string;
+    total: number;
+    users: number;
+    success: number;
+    clientFailure: number;
+    serverError: number;
+    network: number;
+    status0: number;
+    status0Users: number;
+    usersByClass: {
+      success: number;
+      clientFailure: number;
+      serverError: number;
+      network: number;
+    };
+  };
+
+  const emptyStat = (service: string): ServiceStat => ({
+    service,
+    total: 0,
+    users: 0,
+    success: 0,
+    clientFailure: 0,
+    serverError: 0,
+    network: 0,
+    status0: 0,
+    status0Users: 0,
+    usersByClass: { success: 0, clientFailure: 0, serverError: 0, network: 0 },
+  });
+
+  const serviceStatsMap = new Map<string, ServiceStat>();
+  for (const r of byServiceQ.rows) {
+    const svc = (r.service || "OTHER").toUpperCase();
+    const cur = serviceStatsMap.get(svc) ?? emptyStat(svc);
+    cur.total = Number(r.n);
+    cur.users = Number(r.users);
+    serviceStatsMap.set(svc, cur);
+  }
+  for (const r of byServiceClassQ.rows) {
+    const svc = (r.service || "OTHER").toUpperCase();
+    const cur = serviceStatsMap.get(svc) ?? emptyStat(svc);
+    const n = Number(r.n);
+    const u = Number(r.users);
+    if (r.cls === "success") {
+      cur.success = n;
+      cur.usersByClass.success = u;
+    } else if (r.cls === "client_failure") {
+      cur.clientFailure = n;
+      cur.usersByClass.clientFailure = u;
+    } else if (r.cls === "server_error") {
+      cur.serverError = n;
+      cur.usersByClass.serverError = u;
+    } else if (r.cls === "network") {
+      cur.network = n;
+      cur.usersByClass.network = u;
+    }
+    serviceStatsMap.set(svc, cur);
+  }
+  for (const r of status0ByServiceQ.rows) {
+    const svc = (r.service || "OTHER").toUpperCase();
+    const cur = serviceStatsMap.get(svc) ?? emptyStat(svc);
+    cur.status0 = Number(r.n);
+    cur.status0Users = Number(r.users);
+    serviceStatsMap.set(svc, cur);
+  }
+
+  const byService = [...serviceStatsMap.values()]
+    .map((s) => ({ service: s.service, count: s.total, users: s.users }))
+    .sort((a, b) => b.count - a.count);
+
+  const totals = await pool.query<{ method: string | null; path: string; total: string }>(
+    `SELECT COALESCE(http_method, 'GET') AS method,
+            ${EVENT_PATH_SQL} AS path,
+            COUNT(*)::text AS total
+     FROM api_events
+     WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+     GROUP BY 1, 2`,
+    [projectId, range.from, range.to]
+  );
+  const totalMap = new Map(totals.rows.map((r) => [`${r.method ?? "GET"}\0${r.path}`, Number(r.total)]));
+
+  type UserHit = {
+    userKey: string;
+    userId: string | null;
+    email: string | null;
+    requests: number;
+    sessions: number;
+    lastSeen: string;
+    sampleSessionId: string | null;
+  };
+  const usersByEndpoint = new Map<string, UserHit[]>();
+  for (const r of usersQ.rows) {
+    const key = [
+      r.method ?? "GET",
+      r.path || "/",
+      r.status_code ?? "",
+      r.result_class,
+      (r.service || "OTHER").toUpperCase(),
+    ].join("\0");
+    const list = usersByEndpoint.get(key) ?? [];
+    list.push({
+      userKey: r.user_key ?? "",
+      userId: r.user_id,
+      email: r.email,
+      requests: Number(r.requests),
+      sessions: Number(r.sessions),
+      lastSeen: r.last_seen.toISOString(),
+      sampleSessionId: r.sample_session_id,
+    });
+    usersByEndpoint.set(key, list);
+  }
+
+  const endpoints = endpointsQ.rows.map((r) => {
+    const method = r.method ?? "GET";
+    const occurrences = Number(r.occurrences);
+    const usersAffected = Number(r.users_affected);
+    const cls = (r.result_class as HttpResultClass) || "client_failure";
+    const service = (r.service || "OTHER").toUpperCase();
+    const total = totalMap.get(`${method}\0${r.path}`) ?? occurrences;
+    const statusCode = r.status_code;
+    const isStatus0 = (statusCode ?? 0) === 0;
+    const userKey = [method, r.path || "/", statusCode ?? "", cls, service].join("\0");
+    return {
+      method,
+      path: r.path || "/",
+      statusCode,
+      resultClass: cls,
+      service,
+      serviceGroup: service,
+      isStatus0,
+      occurrences,
+      usersAffected,
+      sessionsAffected: Number(r.sessions_affected),
+      firstSeen: r.first_seen.toISOString(),
+      lastSeen: r.last_seen.toISOString(),
+      avgLatencyMs: r.avg_latency ? Math.round(Number(r.avg_latency)) : 0,
+      share: total > 0 ? occurrences / total : 1,
+      severity:
+        cls === "success"
+          ? ("low" as const)
+          : problemSeverity({
+              statusCode,
+              occurrences,
+              usersAffected,
+              resultClass: cls,
+            }),
+      users: usersByEndpoint.get(userKey) ?? [],
+    };
+  });
+
+  const upstreams = await listProjectUpstreams(pool, projectId);
+  const seen = new Set(byService.map((b) => b.service));
+  // Include configured upstreams even if they have 0 traffic in range
+  for (const u of upstreams) {
+    const slug = u.slug.toUpperCase();
+    if (!seen.has(slug)) {
+      seen.add(slug);
+      byService.push({ service: slug, count: 0, users: 0 });
+      serviceStatsMap.set(slug, emptyStat(slug));
+    }
+  }
+
+  const serviceStats = Object.fromEntries(
+    [...serviceStatsMap.entries()].map(([k, v]) => [k, v])
+  );
+
+  // Same source as Overview / Users so the headline user count matches.
+  const allUsersQ = await pool.query<{ n: string }>(
+    `SELECT COUNT(DISTINCT ${USER_KEY_SQL})::text AS n
+     FROM user_sessions
+     WHERE project_id = $1 AND ${USER_KEY_SQL} IS NOT NULL
+       AND ended_at >= $2 AND started_at <= $3`,
+    [projectId, range.from, range.to]
+  );
+
+  return {
+    summary: {
+      ...byClass,
+      total: byClass.success + byClass.clientFailure + byClass.serverError + byClass.network,
+      status0: Number(status0Q.rows[0]?.n ?? 0),
+      status0Users: Number(status0Q.rows[0]?.users ?? 0),
+      usersByClass,
+      usersTotal: Number(allUsersQ.rows[0]?.n ?? 0),
+      failureUsers:
+        usersByClass.clientFailure + usersByClass.serverError + usersByClass.network,
+    },
+    byService,
+    services: byService.map((b) => ({
+      id: b.service,
+      label: b.service,
+      count: b.count,
+      users: b.users,
+    })),
+    serviceStats,
+    endpoints,
+  };
+}
+
+/** Users who hit an endpoint (any status) or failures matching a class / HTTP 0 filter. */
+export async function getApiStatusAffectedUsers(
+  pool: Pool,
+  projectId: string,
+  range: DateRange,
+  opts: {
+    resultClass?: HttpResultClass;
+    status0?: boolean;
+    service?: string;
+    method?: string;
+    path?: string;
+    statusCode?: number | null;
+    /** When true (or when method+path set), include successful requests too. */
+    includeSuccess?: boolean;
+    search?: string;
+    limit?: number;
+  } = {}
+) {
+  const limit = opts.limit ?? 80;
+  const resultClass = httpResultClassSql();
+  const serviceSql = `UPPER(COALESCE(NULLIF(TRIM(service), ''), 'OTHER'))`;
+  const params: unknown[] = [projectId, range.from, range.to];
+  const clauses: string[] = [
+    `project_id = $1`,
+    `occurred_at >= $2`,
+    `occurred_at <= $3`,
+    `${USER_KEY_SQL} IS NOT NULL`,
+  ];
+
+  const scopedToEndpoint = Boolean(opts.method && opts.path);
+  const includeSuccess = opts.includeSuccess === true || scopedToEndpoint;
+
+  if (!includeSuccess) {
+    clauses.push(`(${resultClass}) IN ('client_failure','server_error','network')`);
+    if (opts.resultClass && opts.resultClass !== "success") {
+      params.push(opts.resultClass);
+      clauses.push(`(${resultClass}) = $${params.length}`);
+    }
+  } else if (opts.resultClass) {
+    params.push(opts.resultClass);
+    clauses.push(`(${resultClass}) = $${params.length}`);
+  }
+
+  if (opts.status0) {
+    clauses.push(`COALESCE(status_code, 0) = 0`);
+    if (includeSuccess && !opts.resultClass) {
+      clauses.push(`(${resultClass}) IN ('client_failure','server_error','network')`);
+    }
+  }
+
+  if (opts.service) {
+    const svc = opts.service.toUpperCase();
+    if (svc === "OTHER") {
+      clauses.push(`${serviceSql} NOT IN ('MVEND', 'KORALINK')`);
+    } else {
+      params.push(svc);
+      clauses.push(`${serviceSql} = $${params.length}`);
+    }
+  }
+
+  if (opts.method && opts.path) {
+    params.push(opts.method, opts.path);
+    clauses.push(`COALESCE(http_method, 'GET') = $${params.length - 1}`);
+    clauses.push(`${EVENT_PATH_SQL} = $${params.length}`);
+    if (opts.statusCode === null) {
+      clauses.push(`status_code IS NULL`);
+    } else if (opts.statusCode !== undefined) {
+      params.push(opts.statusCode);
+      clauses.push(`status_code = $${params.length}`);
+    }
+  }
+
+  if (opts.search?.trim()) {
+    params.push(`%${opts.search.trim()}%`);
+    clauses.push(
+      `(COALESCE(user_email,'') ILIKE $${params.length} OR COALESCE(user_id,'') ILIKE $${params.length})`
+    );
+  }
+  params.push(limit);
+
+  const q = await pool.query<{
+    user_key: string | null;
+    user_id: string | null;
+    email: string | null;
+    errors: string;
+    sessions: string;
+    last_seen: Date;
+    sample_session_id: string | null;
+    top_endpoint: string | null;
+  }>(
+    `SELECT ${USER_KEY_SQL} AS user_key,
+            MAX(user_id) FILTER (WHERE user_id IS NOT NULL AND TRIM(user_id) <> '') AS user_id,
+            MAX(user_email) FILTER (WHERE user_email IS NOT NULL AND TRIM(user_email) <> '') AS email,
+            COUNT(*)::text AS errors,
+            COUNT(DISTINCT session_id)::text AS sessions,
+            MAX(occurred_at) AS last_seen,
+            (ARRAY_AGG(session_id ORDER BY occurred_at DESC)
+              FILTER (WHERE session_id IS NOT NULL AND TRIM(session_id) <> ''))[1] AS sample_session_id,
+            (ARRAY_AGG(COALESCE(http_method,'GET') || ' ' || ${EVENT_PATH_SQL} ORDER BY occurred_at DESC))[1] AS top_endpoint
+     FROM api_events
+     WHERE ${clauses.join(" AND ")}
+     GROUP BY ${USER_KEY_SQL}
+     ORDER BY COUNT(*) DESC, MAX(occurred_at) DESC
+     LIMIT $${params.length}`,
+    params
+  );
+
+  return {
+    users: q.rows.map((r) => ({
+      userKey: r.user_key ?? "",
+      userId: r.user_id,
+      email: r.email,
+      errors: Number(r.errors),
+      requests: Number(r.errors),
+      sessions: Number(r.sessions),
+      lastSeen: r.last_seen.toISOString(),
+      sampleSessionId: r.sample_session_id,
+      topEndpoint: r.top_endpoint,
     })),
   };
 }
