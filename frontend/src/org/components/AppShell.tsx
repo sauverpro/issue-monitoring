@@ -147,7 +147,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
   const appNav: NavItem[] = projectBase
     ? [
         { to: `${projectBase}/apis`, label: "API Monitor", icon: Globe },
-        { to: `${projectBase}/problems`, label: "Errors", icon: AlertTriangle },
+        { to: `${projectBase}/problems`, label: "API Status", icon: AlertTriangle },
         { to: `${projectBase}/performance`, label: "Performance", icon: Gauge },
       ]
     : [];
