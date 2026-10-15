@@ -12,6 +12,39 @@ import { PageHeader, Panel } from "@/org/components/ui";
 
 const HTTP_TABS: SnippetTab[] = ["curl", "fetch", "axios"];
 const SDK_TABS: SnippetTab[] = ["sdk-web", "sdk-rn"];
+const PRODUCTION_ORIGIN = "https://monitor.soromafresh.com";
+
+function isPrivateIngestHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "10.0.2.2" ||
+    /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
+  );
+}
+
+function publicizeIntegration(info: IntegrationInfo): IntegrationInfo {
+  const hosted =
+    typeof window !== "undefined" &&
+    !/^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+  if (!hosted) return info;
+  try {
+    const current = new URL(info.ingestUrl);
+    if (!isPrivateIngestHost(current.hostname) && current.protocol === "https:") {
+      return info;
+    }
+  } catch {
+    /* fall through */
+  }
+  const ingestUrl = `${PRODUCTION_ORIGIN}/ingest/v1`;
+  return {
+    ...info,
+    ingestUrl,
+    configUrl: `${ingestUrl}/config`,
+    deviceIngestUrl: undefined,
+    androidEmulatorIngestUrl: undefined,
+  };
+}
 
 export function IntegrationPage() {
   const { orgId, projectId } = useParams();
@@ -25,10 +58,12 @@ export function IntegrationPage() {
     if (!projectId) return;
     apiFetch<IntegrationInfo>(`/console/projects/${projectId}/integration`)
       .then((d) => {
-        setInfo({
-          ...d,
-          configUrl: d.configUrl ?? `${d.ingestUrl}/config`,
-        });
+        setInfo(
+          publicizeIntegration({
+            ...d,
+            configUrl: d.configUrl ?? `${d.ingestUrl}/config`,
+          })
+        );
         setTab(d.platform === "react-native" ? "fetch" : "curl");
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
@@ -55,13 +90,13 @@ export function IntegrationPage() {
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2">
         <UrlCard
-          label="This PC (curl / browser)"
+          label={info.deviceIngestUrl ? "This PC (curl / browser)" : "Ingest URL"}
           value={info.ingestUrl}
           copied={copied === "ingest"}
           onCopy={() => copy("ingest", info.ingestUrl)}
         />
         <UrlCard
-          label="GET config (this PC)"
+          label={info.deviceIngestUrl ? "GET config (this PC)" : "GET config"}
           value={info.configUrl}
           copied={copied === "config"}
           onCopy={() => copy("config", info.configUrl)}
@@ -84,15 +119,24 @@ export function IntegrationPage() {
         )}
       </div>
 
-      <p className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-        <strong>Network Error</strong> on a phone means <code>localhost</code> is the device, not this
-        computer. Paste the <em>Phone / Expo Go</em> URL into the app (same Wi‑Fi). Android emulator
-        uses <code>{info.androidEmulatorIngestUrl ?? "http://10.0.2.2:3000/ingest/v1"}</code>. Enable
-        cleartext HTTP in Expo (<code>android.usesCleartextTraffic: true</code>). Allow Node.js through
-        Windows Firewall on this API port. Ignore{" "}
-        <code>Route "./sentry.config.ts" is missing the required default export</code> — move that file
-        out of Expo Router’s <code>app/</code> folder.
-      </p>
+      <div className="mb-6 space-y-3">
+        <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          <strong>App Store / Play Store:</strong> do not ship the snippet as-is.{" "}
+          <code>PASTE_mntr_KEY_FROM_SETTINGS</code> is rejected (401). Production ingest is{" "}
+          <code>{PRODUCTION_ORIGIN}/ingest/v1</code> (HTTPS). Plain{" "}
+          <code>http://IP:3002</code> is blocked by iOS App Transport Security. Create a key in
+          Settings and ship that HTTPS URL — Apple will not accept cleartext.
+        </p>
+        {(info.deviceIngestUrl || info.androidEmulatorIngestUrl) && (
+        <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <strong>Network Error</strong> on a phone means <code>localhost</code> is the device, not this
+          computer. Paste the <em>Phone / Expo Go</em> URL into the app (same Wi‑Fi). Android emulator
+          uses <code>{info.androidEmulatorIngestUrl ?? "http://10.0.2.2:3000/ingest/v1"}</code>. Enable
+          cleartext HTTP in Expo (<code>android.usesCleartextTraffic: true</code>) for local only. Allow
+          Node.js through Windows Firewall on this API port.
+        </p>
+        )}
+      </div>
 
       <Panel className="mb-6">
         <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium dark:border-zinc-800">
@@ -149,7 +193,8 @@ export function IntegrationPage() {
 
       <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-zinc-600 dark:text-zinc-400">
         <li>
-          Replace <code>mntr_YOUR_PROJECT_KEY</code> with a Settings key. Never commit it.
+          Replace <code>PASTE_mntr_KEY_FROM_SETTINGS</code> with a real key from Settings. A
+          placeholder is rejected as unauthorized. Never commit the key.
         </li>
         <li>
           Browser <code>fetch</code> needs this app origin listed in API <code>CORS_ORIGIN</code>. Native and servers do not.

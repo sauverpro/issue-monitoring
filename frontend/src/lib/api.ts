@@ -1,4 +1,20 @@
-const BASE = import.meta.env.VITE_API_BASE ?? "/api";
+const PRODUCTION_API = "https://monitor.soromafresh.com";
+
+function resolveApiBase(): string {
+  const raw = (import.meta.env.VITE_API_BASE ?? "/api").replace(/\/$/, "");
+  if (!raw || raw === "/api") return raw;
+  try {
+    const u = new URL(raw);
+    if (u.protocol === "http:" || /^\d{1,3}(?:\.\d{1,3}){3}$/.test(u.hostname)) {
+      return PRODUCTION_API;
+    }
+    return raw;
+  } catch {
+    return raw;
+  }
+}
+
+const BASE = resolveApiBase();
 
 export const TOKEN_KEY = "koralink_token";
 

@@ -5,6 +5,7 @@ import { monitorEnvelopeSchema } from "../schemas/monitorIngest.js";
 import { ingestMonitorEnvelope } from "../services/monitorIngest.js";
 import { listProjectUpstreams } from "../services/tenancy.js";
 import { config } from "../config.js";
+import { resolvePublicOrigin } from "../services/lanHost.js";
 
 export function monitorIngestRouter(pool: Pool): IRouter {
   const r = Router();
@@ -15,7 +16,7 @@ export function monitorIngestRouter(pool: Pool): IRouter {
     const upstreams = await listProjectUpstreams(pool, project.projectId);
     res.json({
       schema: "monitor.v1",
-      ingestUrl: `${config.publicIngestUrl}/ingest/v1`,
+      ingestUrl: `${resolvePublicOrigin(req, config.publicIngestUrl)}/ingest/v1`,
       allowedHosts: project.allowedHosts,
       upstreams,
     });

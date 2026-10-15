@@ -31,6 +31,41 @@ export function isLoopbackHttpOrigin(origin: string): boolean {
   }
 }
 
+/** Loopback, emulator, or a raw IP — not a public hostname apps should ship. */
+export function isPrivateHttpOrigin(origin: string): boolean {
+  try {
+    const host = new URL(origin.includes("://") ? origin : `http://${origin}`).hostname.toLowerCase();
+    return (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "10.0.2.2" ||
+      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(host)
+    );
+  } catch {
+    return true;
+  }
+}
+
+/** Prefer PUBLIC_INGEST_URL when it is a real hostname; otherwise the request Host. */
+export function resolvePublicOrigin(
+  req: { get(name: string): string | undefined; protocol: string },
+  configured: string
+): string {
+  const trimmed = configured.replace(/\/$/, "");
+  if (trimmed && !isPrivateHttpOrigin(trimmed)) return trimmed;
+  const proto = String(req.get("x-forwarded-proto") || req.protocol || "http")
+    .split(",")[0]!
+    .trim();
+  const host = String(req.get("x-forwarded-host") || req.get("host") || "")
+    .split(",")[0]!
+    .trim();
+  if (host && !isPrivateHttpOrigin(host)) {
+    return `${proto}://${host}`.replace(/\/$/, "");
+  }
+  return trimmed;
+}
+
 export function deviceOrigins(publicOrigin: string, port: number): {
   lanOrigin: string | null;
   androidEmulatorOrigin: string;
