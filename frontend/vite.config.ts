@@ -15,13 +15,13 @@ export default defineConfig({
       // Trailing slash matters: "/api" as a prefix would also swallow
       // frontend routes like "/api-docs" and proxy them to the backend.
       "/api/": {
-        target: "http://localhost:3000",
+        target: "http://localhost:3002",
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
-      "/console": { target: "http://localhost:3000", changeOrigin: true },
-      "/ingest": { target: "http://localhost:3000", changeOrigin: true },
-      "/sdk": { target: "http://localhost:3000", changeOrigin: true },
+      "/console": { target: "http://localhost:3002", changeOrigin: true },
+      "/ingest": { target: "http://localhost:3002", changeOrigin: true },
+      "/sdk": { target: "http://localhost:3002", changeOrigin: true },
     },
   },
 });

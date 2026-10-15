@@ -15,6 +15,36 @@ import { broadcastSse } from "../sse/hub.js";
 import { SERVICES, type ServiceName } from "../constants.js";
 import type { DbQueryable } from "./slidingWindow.js";
 import { incidentLink, notifySlack } from "./notifications/slack.js";
+import { sanitizePgText, sanitizePgTextOpt } from "./redactBodies.js";
+
+function sanitizePersist(raw: PersistEventInput): PersistEventInput {
+  return {
+    ...raw,
+    service: sanitizePgText(raw.service),
+    endpoint: sanitizePgText(raw.endpoint),
+    request_url: sanitizePgTextOpt(raw.request_url) ?? undefined,
+    error_code: sanitizePgTextOpt(raw.error_code) ?? undefined,
+    source: sanitizePgText(raw.source),
+    session_id: sanitizePgTextOpt(raw.session_id) ?? undefined,
+    request_body: sanitizePgTextOpt(raw.request_body) ?? undefined,
+    response_body: sanitizePgTextOpt(raw.response_body) ?? undefined,
+    upstream_key: sanitizePgText(raw.upstream_key),
+    sentry_event_id: sanitizePgTextOpt(raw.sentry_event_id) ?? undefined,
+    app_service: sanitizePgTextOpt(raw.app_service) ?? undefined,
+    user_id: sanitizePgTextOpt(raw.user_id) ?? undefined,
+    user_email: sanitizePgTextOpt(raw.user_email) ?? undefined,
+    user_role: sanitizePgTextOpt(raw.user_role) ?? undefined,
+    account_type: sanitizePgTextOpt(raw.account_type) ?? undefined,
+    sentry_type: sanitizePgTextOpt(raw.sentry_type) ?? undefined,
+    failure_reason: sanitizePgTextOpt(raw.failure_reason) ?? undefined,
+    http_method: sanitizePgTextOpt(raw.http_method) ?? undefined,
+    current_screen: sanitizePgTextOpt(raw.current_screen) ?? undefined,
+    platform: sanitizePgTextOpt(raw.platform) ?? undefined,
+    os: sanitizePgTextOpt(raw.os) ?? undefined,
+    app_version: sanitizePgTextOpt(raw.app_version) ?? undefined,
+    network: sanitizePgTextOpt(raw.network) ?? undefined,
+  };
+}
 
 async function upsertUserSession(
   client: DbQueryable,
@@ -124,8 +154,9 @@ function isKnownService(service: string): service is ServiceName {
 
 export async function persistAndProcessEvent(
   pool: Pool,
-  raw: PersistEventInput
+  incoming: PersistEventInput
 ): Promise<void> {
+  const raw = sanitizePersist(incoming);
   const occurredAt = new Date(raw.occurred_at);
   const client = await pool.connect();
 

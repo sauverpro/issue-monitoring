@@ -56,7 +56,8 @@ export const config = {
     process.env.PUBLIC_INGEST_URL?.trim() || `http://localhost:${Number(process.env.PORT) || 3002}`
   ).replace(/\/$/, ""),
   trackedApiUrls: tracked,
-  retentionDays: Number(process.env.RETENTION_DAYS) || 30,
+  // 0 = keep api_events forever (nightly delete sweep is disabled).
+  retentionDays: Number(process.env.RETENTION_DAYS) || 0,
   slackWebhookUrl: process.env.SLACK_WEBHOOK_URL?.trim() || "",
   dashboardUrl: (process.env.DASHBOARD_URL?.trim() || "").replace(/\/$/, ""),
   sentry: {

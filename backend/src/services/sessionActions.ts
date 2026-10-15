@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import type { JourneyActionInput } from "./sentryBreadcrumbs.js";
+import { sanitizePgJson, sanitizePgText, sanitizePgTextOpt } from "./redactBodies.js";
 
 export type PersistJourneyInput = JourneyActionInput & { project_id?: string };
 
@@ -16,14 +17,14 @@ export async function persistSessionActions(
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
        ON CONFLICT (session_id, occurred_at, kind, message) DO NOTHING`,
       [
-        a.session_id,
+        sanitizePgText(a.session_id),
         a.occurred_at,
-        a.sentry_event_id ?? null,
-        a.kind,
-        a.message || "",
-        a.screen ?? null,
-        a.from_screen ?? null,
-        JSON.stringify(a.payload ?? {}),
+        sanitizePgTextOpt(a.sentry_event_id) ?? null,
+        sanitizePgText(a.kind),
+        sanitizePgText(a.message || ""),
+        sanitizePgTextOpt(a.screen) ?? null,
+        sanitizePgTextOpt(a.from_screen) ?? null,
+        JSON.stringify(sanitizePgJson(a.payload ?? {})),
         a.project_id ?? null,
       ]
     );

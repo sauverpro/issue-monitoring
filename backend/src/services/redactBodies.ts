@@ -3,6 +3,31 @@ const SENSITIVE_KEY =
 
 const MAX_BODY_CHARS = 131072;
 
+/** Postgres text/jsonb reject NUL (0x00). Mobile bodies often include it. */
+export function sanitizePgText(value: string): string {
+  return value.replace(/\u0000/g, "");
+}
+
+export function sanitizePgTextOpt(
+  value: string | null | undefined
+): string | null | undefined {
+  if (value == null) return value;
+  return sanitizePgText(value);
+}
+
+export function sanitizePgJson(value: unknown): unknown {
+  if (typeof value === "string") return sanitizePgText(value);
+  if (Array.isArray(value)) return value.map(sanitizePgJson);
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[sanitizePgText(k)] = sanitizePgJson(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 export function redactValue(value: unknown, depth = 0): unknown {
   if (depth > 8) return "[truncated]";
   if (value == null) return value;
@@ -32,5 +57,5 @@ export function clipAndRedactBody(raw: unknown): string | undefined {
   if (raw === undefined || raw === null || raw === "") return undefined;
   const redacted = redactValue(raw);
   const text = typeof redacted === "string" ? redacted : JSON.stringify(redacted);
-  return text.slice(0, MAX_BODY_CHARS);
+  return sanitizePgText(text.slice(0, MAX_BODY_CHARS));
 }
