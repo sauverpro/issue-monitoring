@@ -1,7 +1,7 @@
 import type { Pool } from "pg";
 import type { PersistEventInput } from "../types/persistEvent.js";
 import { deriveOutcome, type MonitorEnvelope, type MonitorEvent } from "../schemas/monitorIngest.js";
-import { clipAndRedactBody } from "./redactBodies.js";
+import { clipAndRedactBody, sanitizePgText, sanitizePgTextOpt } from "./redactBodies.js";
 import {
   classifyNetworkFailure,
   extractHost,
@@ -46,17 +46,17 @@ async function touchSession(
        network = COALESCE(EXCLUDED.network, user_sessions.network),
        updated_at = now()`,
     [
-      sess.id,
+      sanitizePgText(sess.id),
       occurredAt,
-      sess.user_id ?? null,
-      sess.email ?? null,
-      sess.role ?? null,
-      sess.account_type ?? null,
+      sanitizePgTextOpt(sess.user_id) ?? null,
+      sanitizePgTextOpt(sess.email) ?? null,
+      sanitizePgTextOpt(sess.role) ?? null,
+      sanitizePgTextOpt(sess.account_type) ?? null,
       projectId,
-      ctx?.platform ?? null,
-      ctx?.os ?? null,
-      ctx?.app_version ?? null,
-      ctx?.network ?? null,
+      sanitizePgTextOpt(ctx?.platform) ?? null,
+      sanitizePgTextOpt(ctx?.os) ?? null,
+      sanitizePgTextOpt(ctx?.app_version) ?? null,
+      sanitizePgTextOpt(ctx?.network) ?? null,
     ]
   );
 }
@@ -199,45 +199,55 @@ export async function ingestMonitorEnvelope(
         app_version: envelope.context?.app_version,
         network: envelope.context?.network,
       };
-      await persistAndProcessEvent(pool, payload);
-      accepted += 1;
+      try {
+        await persistAndProcessEvent(pool, payload);
+        accepted += 1;
+      } catch (err) {
+        dropped += 1;
+        console.error("[ingest/v1] api event dropped", eventId, err);
+      }
       continue;
     }
 
     const journeyKind = ev.kind === "system" ? "lifecycle" : ev.kind;
     const described = describeJourneyEvent(ev, envelope.context?.screen);
 
-    const n = await persistSessionActions(pool, [
-      {
-        session_id: envelope.session.id,
-        occurred_at: ev.occurred_at,
-        sentry_event_id: eventId,
-        kind: journeyKind,
-        message: described.message,
-        screen: described.screen,
-        from_screen: described.fromScreen,
-        payload: {
-          kind: ev.kind,
-          action_index: actionIndex,
-          user: envelope.session,
-          context: envelope.context,
-          ...described.extra,
+    try {
+      const n = await persistSessionActions(pool, [
+        {
+          session_id: envelope.session.id,
+          occurred_at: ev.occurred_at,
+          sentry_event_id: eventId,
+          kind: journeyKind,
+          message: described.message,
+          screen: described.screen,
+          from_screen: described.fromScreen,
+          payload: {
+            kind: ev.kind,
+            action_index: actionIndex,
+            user: envelope.session,
+            context: envelope.context,
+            ...described.extra,
+          },
+          project_id: project.projectId,
         },
-        project_id: project.projectId,
-      },
-    ]);
-    accepted += n > 0 ? 1 : 0;
-    if (n === 0) dropped += 1;
-    else {
-      await pool.query(
-        `UPDATE user_sessions SET
-           ended_at = GREATEST(ended_at, $2::timestamptz),
-           last_action_index = GREATEST(COALESCE(last_action_index, 0), $3),
-           total_events = total_events + 1,
-           updated_at = now()
-         WHERE session_id = $1`,
-        [envelope.session.id, ev.occurred_at, actionIndex]
-      );
+      ]);
+      accepted += n > 0 ? 1 : 0;
+      if (n === 0) dropped += 1;
+      else {
+        await pool.query(
+          `UPDATE user_sessions SET
+             ended_at = GREATEST(ended_at, $2::timestamptz),
+             last_action_index = GREATEST(COALESCE(last_action_index, 0), $3),
+             total_events = total_events + 1,
+             updated_at = now()
+           WHERE session_id = $1`,
+          [sanitizePgText(envelope.session.id), ev.occurred_at, actionIndex]
+        );
+      }
+    } catch (err) {
+      dropped += 1;
+      console.error("[ingest/v1] journey event dropped", eventId, err);
     }
   }
 

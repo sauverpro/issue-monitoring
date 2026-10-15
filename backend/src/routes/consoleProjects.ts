@@ -12,7 +12,7 @@ import {
   refreshAllowedHosts,
 } from "../services/tenancy.js";
 import { getProjectOverview, getProjectApiStats } from "../services/monitorMetrics.js";
-import { deviceOrigins } from "../services/lanHost.js";
+import { deviceOrigins, isLoopbackHttpOrigin, resolvePublicOrigin } from "../services/lanHost.js";
 import {
   getProjectSessionActions,
   getProjectSessionFailures,
@@ -20,6 +20,7 @@ import {
 } from "../services/monitorSessions.js";
 import {
   getJourneyHome,
+  getUserCoverage,
   getUserDays,
   getUserProfile,
   getUserSessionsInRange,
@@ -367,12 +368,29 @@ export function consoleProjectsRouter(pool: Pool): IRouter {
         to: typeof req.query.to === "string" ? req.query.to : undefined,
         days: req.query.days != null ? Number(req.query.days) : 30,
       });
+      const limit = Math.min(Math.max(Number(req.query.limit) || 80, 1), 200);
+      const offset = Math.max(Number(req.query.offset) || 0, 0);
       const items = await listProjectUsers(pool, req.params.projectId!, {
         search: typeof req.query.search === "string" ? req.query.search : undefined,
         filter: typeof req.query.filter === "string" ? req.query.filter : undefined,
         range,
+        limit,
+        offset,
       });
       res.json(items);
+    }
+  );
+
+  r.get(
+    "/console/projects/:projectId/users/coverage",
+    requireProject(pool, "viewer"),
+    async (req, res) => {
+      const range = parseDateRange({
+        from: typeof req.query.from === "string" ? req.query.from : undefined,
+        to: typeof req.query.to === "string" ? req.query.to : undefined,
+        days: req.query.days != null ? Number(req.query.days) : 30,
+      });
+      res.json(await getUserCoverage(pool, req.params.projectId!, range));
     }
   );
 
@@ -679,17 +697,20 @@ export function consoleProjectsRouter(pool: Pool): IRouter {
     requireProject(pool, "viewer"),
     async (req, res) => {
       const p = req.consoleProject!;
-      const ingestUrl = `${config.publicIngestUrl}/ingest/v1`;
-      const { lanOrigin, androidEmulatorOrigin } = deviceOrigins(
-        config.publicIngestUrl,
-        config.port
-      );
-      const deviceOrigin = lanOrigin ?? config.publicIngestUrl;
+      const publicOrigin = resolvePublicOrigin(req, config.publicIngestUrl);
+      const ingestUrl = `${publicOrigin}/ingest/v1`;
+      const local = isLoopbackHttpOrigin(publicOrigin);
+      const { lanOrigin, androidEmulatorOrigin } = deviceOrigins(publicOrigin, config.port);
+      const deviceOrigin = lanOrigin ?? publicOrigin;
       res.json({
         ingestUrl,
         configUrl: `${ingestUrl}/config`,
-        deviceIngestUrl: `${deviceOrigin}/ingest/v1`,
-        androidEmulatorIngestUrl: `${androidEmulatorOrigin}/ingest/v1`,
+        ...(local
+          ? {
+              deviceIngestUrl: `${deviceOrigin}/ingest/v1`,
+              androidEmulatorIngestUrl: `${androidEmulatorOrigin}/ingest/v1`,
+            }
+          : {}),
         platform: p.platform,
         allowedHosts: p.allowedHosts,
         packages: {

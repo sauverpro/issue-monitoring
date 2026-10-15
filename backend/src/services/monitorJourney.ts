@@ -250,12 +250,54 @@ async function sessionIdsForUser(
   return q.rows.map((r) => r.session_id);
 }
 
+export type UserCoverage = {
+  identified: number;
+  anonymousSessions: number;
+  totalSessions: number;
+  firstSeen: string | null;
+  lastSeen: string | null;
+};
+
+export async function getUserCoverage(
+  pool: Pool,
+  projectId: string,
+  range: DateRange
+): Promise<UserCoverage> {
+  const q = await pool.query<{
+    identified: string;
+    anonymous_sessions: string;
+    total_sessions: string;
+    first_seen: Date | null;
+    last_seen: Date | null;
+  }>(
+    `SELECT
+       COUNT(DISTINCT ${USER_KEY_SQL})
+         FILTER (WHERE ${USER_KEY_SQL} IS NOT NULL)::text AS identified,
+       COUNT(*) FILTER (WHERE ${USER_KEY_SQL} IS NULL)::text AS anonymous_sessions,
+       COUNT(*)::text AS total_sessions,
+       MIN(started_at) AS first_seen,
+       MAX(ended_at) AS last_seen
+     FROM user_sessions
+     WHERE project_id = $1 AND ended_at >= $2 AND started_at <= $3`,
+    [projectId, range.from, range.to]
+  );
+  const r = q.rows[0];
+  return {
+    identified: Number(r?.identified ?? 0),
+    anonymousSessions: Number(r?.anonymous_sessions ?? 0),
+    totalSessions: Number(r?.total_sessions ?? 0),
+    firstSeen: r?.first_seen?.toISOString() ?? null,
+    lastSeen: r?.last_seen?.toISOString() ?? null,
+  };
+}
+
 export async function listProjectUsers(
   pool: Pool,
   projectId: string,
-  opts: { search?: string; filter?: string; range?: DateRange; limit?: number }
+  opts: { search?: string; filter?: string; range?: DateRange; limit?: number; offset?: number }
 ): Promise<JourneyUser[]> {
   const limit = opts.limit ?? 80;
+  const offset = Math.max(0, opts.offset ?? 0);
   const params: unknown[] = [projectId];
   let i = 2;
   const conds = [`project_id = $1`, `${USER_KEY_SQL} IS NOT NULL`];
@@ -276,6 +318,7 @@ export async function listProjectUsers(
   // Fetch extra rows when filtering by classified problems so post-filter still fills the page.
   const fetchLimit = opts.filter === "errors" ? Math.min(limit * 4, 320) : limit;
   params.push(fetchLimit);
+  params.push(offset);
   const q = await pool.query<{
     user_key: string;
     user_id: string | null;
@@ -298,7 +341,7 @@ export async function listProjectUsers(
      WHERE ${conds.join(" AND ")}
      GROUP BY ${USER_KEY_SQL}
      ORDER BY last_active DESC
-     LIMIT $${i}`,
+     LIMIT $${i} OFFSET $${i + 1}`,
     params
   );
 

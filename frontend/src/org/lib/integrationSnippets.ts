@@ -53,7 +53,7 @@ export function snippetFor(tab: SnippetTab, info: IntegrationInfo): string {
       2
     );
     return `export INGEST="${info.ingestUrl}"
-export KEY="mntr_YOUR_PROJECT_KEY"
+export KEY="PASTE_mntr_KEY_FROM_SETTINGS"
 
 # 1) Confirm allowlisted hosts
 curl -sS -H "X-Monitor-Key: $KEY" "${info.configUrl}"
@@ -67,7 +67,7 @@ curl -sS -X POST "$INGEST" \\
 
   if (tab === "fetch") {
     return `const INGEST_URL = "${appUrl}";
-const API_KEY = "mntr_YOUR_PROJECT_KEY";
+const API_KEY = "PASTE_mntr_KEY_FROM_SETTINGS";
 
 const session = {
   id: crypto.randomUUID(),
@@ -182,7 +182,7 @@ export async function monitoredFetch(input, init) {
 // Monitor · full axios integration (no SDK package) — monitor.ts
 // Copy this whole file into your app once. Everything below sends events to:
 //   POST ${appUrl}
-// with header  X-Monitor-Key: mntr_YOUR_PROJECT_KEY
+// with header  X-Monitor-Key: PASTE_mntr_KEY_FROM_SETTINGS
 //
 // 1) Setup + session bootstrap
 // 2) postMonitor()            — the only function that talks to the network
@@ -198,7 +198,7 @@ export async function monitoredFetch(input, init) {
 import axios from "axios";
 
 const INGEST_URL = "${appUrl}";
-const API_KEY = "mntr_YOUR_PROJECT_KEY";
+const API_KEY = "PASTE_mntr_KEY_FROM_SETTINGS";
 
 // -- 1) Setup + session bootstrap ------------------------------------------
 // One id for the whole app visit (cold start to background/close). Persist it
@@ -530,7 +530,7 @@ axios.interceptors.response.use(
 
 init({
   ingestUrl: "${info.ingestUrl}",
-  apiKey: "mntr_YOUR_PROJECT_KEY",
+  apiKey: "PASTE_mntr_KEY_FROM_SETTINGS",
 });
 
 setUser({ id: user.id, email: user.email, role: user.role });
@@ -575,7 +575,7 @@ import { AppState } from "react-native";
 
 init({
   ingestUrl: "${appUrl}",
-  apiKey: "mntr_YOUR_PROJECT_KEY",
+  apiKey: "PASTE_mntr_KEY_FROM_SETTINGS",
 });
 
 globalThis.fetch = wrapFetch(globalThis.fetch);
