@@ -25,7 +25,8 @@ function sanitizePersist(raw: PersistEventInput): PersistEventInput {
     endpoint: sanitizePgText(raw.endpoint),
     request_url: sanitizePgTextOpt(raw.request_url) ?? undefined,
     error_code: sanitizePgTextOpt(raw.error_code) ?? undefined,
-    source: sanitizePgText(raw.source),
+    // Only strips NUL bytes, so the value stays within the source union.
+    source: sanitizePgText(raw.source) as PersistEventInput["source"],
     session_id: sanitizePgTextOpt(raw.session_id) ?? undefined,
     request_body: sanitizePgTextOpt(raw.request_body) ?? undefined,
     response_body: sanitizePgTextOpt(raw.response_body) ?? undefined,
