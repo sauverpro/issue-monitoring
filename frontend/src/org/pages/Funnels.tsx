@@ -6,6 +6,8 @@ import type { FunnelStep } from "@/org/types";
 import { TimeRangePicker } from "@/org/components/TimeRangePicker";
 import { JourneyFunnelViz } from "@/org/components/JourneyFunnelViz";
 import { EmptyState, PageHeader, Panel, StatCard } from "@/org/components/ui";
+import { FeatureFunnels } from "@/org/components/FeatureFunnels";
+import { useCanManage } from "@/org/lib/auth";
 
 type FunnelReport = {
   steps: FunnelStep[];
@@ -21,7 +23,8 @@ type FunnelReport = {
 };
 
 export function FunnelsPage() {
-  const { projectId } = useParams();
+  const { orgId, projectId } = useParams();
+  const canManage = useCanManage(orgId);
   const { range } = useRange();
   const [data, setData] = useState<FunnelReport | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,9 +46,12 @@ export function FunnelsPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Funnels"
-        description="Conversion through your primary screen flow."
+        description="Adoption of key business flows, and conversion through the primary screen flow."
         actions={<TimeRangePicker />}
       />
+      <FeatureFunnels projectId={projectId!} query={range.query.toString()} canManage={canManage} />
+
+      <h2 className="mb-3 text-sm font-semibold">Screen flow</h2>
       <div className="mb-6 max-w-xs">
         <StatCard
           label="Overall conversion"

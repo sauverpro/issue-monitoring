@@ -169,12 +169,14 @@ export async function listProjectUpstreams(
     slug: string;
     host: string;
     label: string;
+    category: string;
+    channel_role: string | null;
   }>(
-    `SELECT id::text, slug, host, label
+    `SELECT id::text, slug, host, label, category, channel_role
      FROM project_upstreams WHERE project_id = $1 ORDER BY slug ASC`,
     [projectId]
   );
-  return q.rows;
+  return q.rows.map(({ channel_role, ...r }) => ({ ...r, channelRole: channel_role }));
 }
 
 export async function refreshAllowedHosts(pool: Pool, projectId: string): Promise<string[]> {

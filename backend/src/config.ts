@@ -60,6 +60,16 @@ export const config = {
   retentionDays: Number(process.env.RETENTION_DAYS) || 0,
   slackWebhookUrl: process.env.SLACK_WEBHOOK_URL?.trim() || "",
   dashboardUrl: (process.env.DASHBOARD_URL?.trim() || "").replace(/\/$/, ""),
+  // Scheduled report emails; unset SMTP_HOST disables delivery (schedules record "skipped").
+  smtp: {
+    host: process.env.SMTP_HOST?.trim() || "",
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === "true",
+    user: process.env.SMTP_USER?.trim() || "",
+    pass: process.env.SMTP_PASS || "",
+    from: process.env.SMTP_FROM?.trim() || "Monitor Reports <reports@localhost>",
+  },
+  reportSchedulerIntervalMs: Number(process.env.REPORT_SCHEDULER_INTERVAL_MS) || 10 * 60_000,
   sentry: {
     authToken: process.env.SENTRY_AUTH_TOKEN?.trim() || "",
     org: process.env.SENTRY_ORG?.trim() || "ict-chamber",

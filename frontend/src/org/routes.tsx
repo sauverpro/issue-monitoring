@@ -23,6 +23,10 @@ import { FunnelsPage } from "@/org/pages/Funnels";
 import { SettingsPage } from "@/org/pages/Settings";
 import { IntegrationPage } from "@/org/pages/Integration";
 import { ReportsPage } from "@/org/pages/Reports";
+import { FeedbackPage } from "@/org/pages/Feedback";
+import { ReleasesPage } from "@/org/pages/Releases";
+import { IncidentsPage } from "@/org/pages/Incidents";
+import { PaymentsPage } from "@/org/pages/Payments";
 import { PlatformAdminPage } from "@/platform/pages/Admin";
 import { PlatformPackagesPage } from "@/platform/pages/Packages";
 
@@ -272,6 +276,38 @@ export const orgRoutes = (
       element={
         <OrgProtected>
           <ReportsPage />
+        </OrgProtected>
+      }
+    />
+    <Route
+      path="/orgs/:orgId/projects/:projectId/incidents"
+      element={
+        <OrgProtected>
+          <IncidentsPage />
+        </OrgProtected>
+      }
+    />
+    <Route
+      path="/orgs/:orgId/projects/:projectId/payments"
+      element={
+        <OrgProtected>
+          <PaymentsPage />
+        </OrgProtected>
+      }
+    />
+    <Route
+      path="/orgs/:orgId/projects/:projectId/feedback"
+      element={
+        <OrgProtected>
+          <FeedbackPage />
+        </OrgProtected>
+      }
+    />
+    <Route
+      path="/orgs/:orgId/projects/:projectId/releases"
+      element={
+        <OrgProtected>
+          <ReleasesPage />
         </OrgProtected>
       }
     />

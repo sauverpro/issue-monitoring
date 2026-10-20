@@ -93,7 +93,8 @@ export class FlowDoc {
   }
 
   subheading(title: string): void {
-    this.ensureSpace(22);
+    // Keep the heading with at least a table header + first row (or two lines of text).
+    this.ensureSpace(66);
     this.pdf.text(title, this.marginX, this.y, { size: 10.5, bold: true, color: this.theme.ink });
     this.y += 18;
   }

@@ -28,6 +28,14 @@ import {
 } from "./monitorReportPdf.js";
 import { A4_PORTRAIT, SimplePdf, hexColor, type PdfColor } from "./simplePdf.js";
 import { FlowDoc } from "./flowPdf.js";
+import { evaluateProjectFunnels, type FunnelResult } from "./featureFunnels.js";
+import {
+  getFeedbackSummary,
+  getReleaseSummary,
+  type FeedbackSummary,
+  type ReleaseSummary,
+} from "./productOps.js";
+import { getIncidentReport, getPaymentsReport, type IncidentReport, type PaymentsReport } from "./reliability.js";
 
 const MARGIN = 40;
 const CONTENT_TOP = 76;
@@ -485,16 +493,33 @@ export async function exportExecutiveReportPdf(
   projectName: string,
   range: DateRange
 ): Promise<{ filename: string; buffer: Buffer }> {
-  const [overview, funnels, retention, dashboard, problems, performance, behavior] = await Promise.all([
-    getReportOverview(pool, projectId, range),
-    getFunnelReport(pool, projectId, range),
-    getReportRetention(pool, projectId, range),
-    getProjectDashboard(pool, projectId, range),
-    getProjectProblems(pool, projectId, range),
-    getProjectPerformance(pool, projectId, range),
-    getReportBehavior(pool, projectId, range),
-  ]);
-  const buffer = renderExecutiveReportPdf({ projectName, overview, funnels, retention, dashboard, problems, performance, behavior });
+  const [overview, funnels, retention, dashboard, problems, performance, behavior, featureFunnels, feedback, releases, incidents, payments] =
+    await Promise.all([
+      getReportOverview(pool, projectId, range),
+      getFunnelReport(pool, projectId, range),
+      getReportRetention(pool, projectId, range),
+      getProjectDashboard(pool, projectId, range),
+      getProjectProblems(pool, projectId, range),
+      getProjectPerformance(pool, projectId, range),
+      getReportBehavior(pool, projectId, range),
+      evaluateProjectFunnels(pool, projectId, range),
+      getFeedbackSummary(pool, projectId, range),
+      getReleaseSummary(pool, projectId, range),
+      getIncidentReport(pool, projectId, range),
+      getPaymentsReport(pool, projectId, range),
+    ]);
+  const buffer = renderExecutiveReportPdf({
+    projectName,
+    overview,
+    funnels,
+    retention,
+    dashboard,
+    problems,
+    performance,
+    behavior,
+    product: { featureFunnels, feedback, releases },
+    reliability: { incidents, payments },
+  });
   const stamp = range.from.toISOString().slice(0, 10);
   const slug = projectName.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "project";
   return { filename: `monitor-executive-report-${slug}-${stamp}.pdf`, buffer };
@@ -509,8 +534,12 @@ export function renderExecutiveReportPdf(input: {
   problems: Problems;
   performance: Performance;
   behavior: Behavior;
+  /** Feature adoption, feedback backlog and releases (workplan 9.2.1); section omitted when absent. */
+  product?: ProductSection;
+  /** Incident log, resolution times and payment reliability (workplan 9.1.5). */
+  reliability?: ReliabilitySection;
 }): Buffer {
-  const { projectName, overview, funnels, retention, dashboard, problems, performance, behavior } = input;
+  const { projectName, overview, funnels, retention, dashboard, problems, performance, behavior, product, reliability } = input;
   const health = resolveHealth(overview, dashboard);
   const status = computeOverallStatus(health, overview.kpis.users.delta);
 
@@ -682,6 +711,8 @@ export function renderExecutiveReportPdf(input: {
     );
   }
 
+  if (reliability) drawReliabilitySubsections(doc, cw, reliability);
+
   // -- 4. API Performance & Technical Assessment --------------------------
   doc.heading("4", "API Performance & Technical Assessment");
   doc.para(paraPerformance(performance));
@@ -717,8 +748,11 @@ export function renderExecutiveReportPdf(input: {
     }
   );
 
-  // -- 5. Recommendations & 30-Day Stabilization Plan ---------------------
-  doc.heading("5", "Recommendations & 30-Day Stabilization Plan");
+  // -- 5. Feature Adoption, Feedback & Releases ---------------------------
+  if (product) drawProductSection(doc, cw, product);
+
+  // -- 6. Recommendations & 30-Day Stabilization Plan ---------------------
+  doc.heading(product ? "6" : "5", "Recommendations & 30-Day Stabilization Plan");
   doc.para(
     "The monitoring evidence supports a focused stabilization program. The objective should be to reduce user-impacting failures first, then address latency and finally improve observability quality so subsequent reports can explain not only what happened, but why."
   );
@@ -762,6 +796,248 @@ export function renderExecutiveReportPdf(input: {
   );
 
   return doc.finish(paintFooter);
+}
+
+export type ReliabilitySection = { incidents: IncidentReport; payments: PaymentsReport };
+
+function fmtMinutes(m: number | null): string {
+  if (m == null) return "-";
+  if (m < 1) return "<1 min";
+  if (m < 120) return `${Math.round(m)} min`;
+  if (m < 48 * 60) return `${(m / 60).toFixed(1)} h`;
+  return `${(m / 1440).toFixed(1)} days`;
+}
+
+function drawReliabilitySubsections(doc: FlowDoc, cw: number, { incidents, payments }: ReliabilitySection): void {
+  const s = incidents.summary;
+  doc.subheading("Incident Log & Resolution Times");
+  if (s.total === 0) {
+    doc.para("No incidents were opened on this project's services in the period.", { color: THEME.muted, size: 8.5 });
+  } else {
+    const howResolved =
+      s.manuallyResolved === 0
+        ? "All resolved incidents recovered automatically once error rates fell back below threshold."
+        : `${fmt(s.manuallyResolved)} were closed by an operator; the rest recovered automatically once error rates fell back below threshold.`;
+    doc.para(
+      `${fmt(s.total)} incident(s) were raised on the services this app depends on. Half were resolved within ${fmtMinutes(s.medianResolutionMinutes)} ` +
+        `and 90% within ${fmtMinutes(s.p90ResolutionMinutes)}; the mean is ${fmtMinutes(s.meanResolutionMinutes)} because of a few long outages ` +
+        `(longest ${fmtMinutes(s.longestMinutes)}). ${howResolved} ` +
+        `${fmt(s.usersAffected)} agent(s) hit at least one failed call during an incident.`
+    );
+  }
+  doc.table(
+    makeCols(cw, [
+      { label: "Service", frac: 0.3 },
+      { label: "Incidents", frac: 0.12, align: "right" },
+      { label: "Downtime", frac: 0.14, align: "right" },
+      { label: "Availability", frac: 0.15, align: "right" },
+      { label: "Median fix", frac: 0.14, align: "right" },
+      { label: "Alert at", align: "right" },
+    ]),
+    incidents.byService.map((r) => [
+      r.label,
+      fmt(r.incidents),
+      fmtMinutes(r.downtimeMinutes),
+      `${(r.availability * 100).toFixed(2)}%`,
+      fmtMinutes(r.medianResolutionMinutes),
+      `${+r.thresholdPct.toFixed(1)}% errors`,
+    ]),
+    {
+      textColor: (_row, ci, ri) => {
+        if (ci !== 3) return undefined;
+        const a = incidents.byService[ri]!.availability;
+        return a < 0.97 ? PRESET.critical.color : a < 0.995 ? PRESET.warning.color : PRESET.healthy.color;
+      },
+      boldCell: (_row, ci) => ci === 3,
+    }
+  );
+
+  // The deliverable asks for how issues were raised and resolved: list the most impactful ones.
+  const notable = [...incidents.incidents]
+    .sort((a, b) => b.usersAffected - a.usersAffected || b.durationMinutes - a.durationMinutes)
+    .slice(0, 10);
+  if (notable.length > 0) {
+    doc.subheading("Most Impactful Incidents");
+    doc.table(
+      makeCols(cw, [
+        { label: "Opened", frac: 0.13 },
+        { label: "Service", frac: 0.13 },
+        { label: "Sev.", frac: 0.07 },
+        { label: "Duration", frac: 0.11, align: "right" },
+        { label: "Agents", frac: 0.09, align: "right" },
+        { label: "How it was resolved", align: "left" },
+      ]),
+      notable.map((i) => [
+        fmtDate(i.openedAt),
+        i.service,
+        i.severity,
+        fmtMinutes(i.durationMinutes),
+        fmt(i.usersAffected),
+        i.status !== "resolved"
+          ? `Still ${i.status}`
+          : i.autoResolved && i.notes === 0
+            ? "Recovered automatically (error rate back under threshold)"
+            : (i.resolution ?? "Resolved by an operator"),
+      ]),
+      { wrap: true }
+    );
+  }
+
+  doc.subheading("Payment Channel Reliability");
+  if (payments.channels.length === 0) {
+    doc.para("No upstream is tagged as a payment channel for this project (Settings -> upstream category).", { color: THEME.muted, size: 8.5 });
+    return;
+  }
+  doc.table(
+    makeCols(cw, [
+      { label: "Channel", frac: 0.28 },
+      { label: "Role", frac: 0.1 },
+      { label: "Calls", frac: 0.12, align: "right" },
+      { label: "Success", frac: 0.12, align: "right" },
+      { label: "Agents affected", frac: 0.16, align: "right" },
+      { label: "Incidents", align: "right" },
+    ]),
+    payments.channels.map((c) => [
+      c.label,
+      c.role ? humanize(c.role) : "-",
+      fmt(c.calls),
+      c.successRate == null ? "-" : `${(c.successRate * 100).toFixed(1)}%`,
+      fmt(c.agentsAffected),
+      fmt(c.incidents),
+    ]),
+    {
+      textColor: (_row, ci, ri) => {
+        if (ci !== 3) return undefined;
+        const r = payments.channels[ri]!.successRate;
+        return r == null ? undefined : r < 0.9 ? PRESET.critical.color : r < 0.98 ? PRESET.warning.color : PRESET.healthy.color;
+      },
+      boldCell: (_row, ci) => ci === 3,
+    }
+  );
+  const primary = payments.channels[0]!;
+  const top = primary.failingEndpoints.slice(0, 3);
+  if (top.length > 0) {
+    doc.callout(
+      `Why ${primary.label} payments fail`,
+      top
+        .map((e) => `${e.method} ${e.path}: ${fmt(e.failures)} of ${fmt(e.calls)} calls failed${e.topStatus ? ` (mostly HTTP ${e.topStatus})` : ""}, ${fmt(e.agents)} agent(s).`)
+        .join(" "),
+      { bg: PRESET.critical.bg, accent: PRESET.critical.color }
+    );
+  }
+  if (!payments.hasBackup) {
+    doc.para(
+      "No backup payment channel is configured. Tag the mobile-money or secondary provider upstream as a backup payment channel so its readiness is reported alongside the primary rail.",
+      { color: THEME.muted, size: 8.5 }
+    );
+  }
+}
+
+export type ProductSection = {
+  featureFunnels: { name: string; feature: string; result: FunnelResult }[];
+  feedback: FeedbackSummary;
+  releases: ReleaseSummary;
+};
+
+const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
+const humanize = (s: string) => s.replace(/[_-]+/g, " ").replace(/^./, (c) => c.toUpperCase());
+
+function drawProductSection(doc: FlowDoc, cw: number, product: ProductSection): void {
+  const { featureFunnels, feedback, releases } = product;
+  doc.heading("5", "Feature Adoption, Feedback & Releases");
+  const started = featureFunnels.reduce((s, f) => s + f.result.started, 0);
+  doc.para(
+    featureFunnels.length === 0
+      ? "No feature funnels are defined for this project yet. Define funnels for the key business flows (ordering, contracting, coupon redemption) under Analytics -> Funnels so adoption is tracked in every report."
+      : `${featureFunnels.length} feature funnel(s) were evaluated, with ${fmt(started)} user entries across them. Completion shows how many users who started each flow finished it, and the drop-off column shows where the rest stopped.`
+  );
+
+  if (featureFunnels.length > 0) {
+    doc.subheading("Feature Adoption Funnels");
+    doc.table(
+      makeCols(cw, [
+        { label: "Feature flow", frac: 0.3 },
+        { label: "Started", frac: 0.12, align: "right" },
+        { label: "Completed", frac: 0.14, align: "right" },
+        { label: "Completion", frac: 0.14, align: "right" },
+        { label: "Largest drop-off", align: "left" },
+      ]),
+      featureFunnels.map((f) => [
+        f.name,
+        fmt(f.result.started),
+        fmt(f.result.completed),
+        f.result.started ? pct(f.result.completionRate) : "-",
+        f.result.biggestDrop ? `${f.result.biggestDrop.to} (${pct(f.result.biggestDrop.rate)} lost)` : "-",
+      ]),
+      { wrap: true }
+    );
+    const blocked = featureFunnels
+      .flatMap((f) => f.result.steps.filter((s) => s.failedUsers > 0).map((s) => ({ flow: f.name, step: s })))
+      .sort((a, b) => b.step.failedUsers - a.step.failedUsers)
+      .slice(0, 3);
+    if (blocked.length > 0) {
+      doc.callout(
+        "Adoption blocked by failing calls",
+        blocked
+          .map((b) => `${b.flow}: ${fmt(b.step.failedUsers)} user(s) attempted "${b.step.label}" but the call never succeeded.`)
+          .join(" "),
+        { bg: PRESET.warning.bg, accent: PRESET.warning.color }
+      );
+    }
+  }
+
+  doc.subheading("User Feedback Loop");
+  doc.table(makeCols(cw, [{ label: "Indicator", frac: 0.55 }, { label: "Value", align: "right" }]), [
+    ["Feedback received in period", fmt(feedback.received)],
+    ["Feedback resolved in period", fmt(feedback.resolved)],
+    ["Open backlog (all time)", fmt(feedback.open)],
+    [
+      "Median time to resolve",
+      feedback.medianResolutionHours == null
+        ? "-"
+        : feedback.medianResolutionHours >= 48
+          ? `${(feedback.medianResolutionHours / 24).toFixed(1)} days`
+          : `${feedback.medianResolutionHours.toFixed(1)} hours`,
+    ],
+    ["Channels", feedback.bySource.map((s) => `${humanize(s.source)} ${s.total}`).join(", ") || "-"],
+  ]);
+  if (feedback.byFeature.length > 0) {
+    doc.table(
+      makeCols(cw, [{ label: "Feature", frac: 0.5 }, { label: "Items", frac: 0.25, align: "right" }, { label: "Still open", align: "right" }]),
+      feedback.byFeature.map((f) => [humanize(f.feature), fmt(f.total), fmt(f.open)])
+    );
+  }
+  if (feedback.topOpen.length > 0) {
+    doc.subheading("Top Open Enhancement Requests");
+    doc.table(
+      makeCols(cw, [{ label: "Request", frac: 0.52 }, { label: "Feature", frac: 0.18 }, { label: "Priority", frac: 0.14 }, { label: "Status", align: "left" }]),
+      feedback.topOpen.map((f) => [f.title, humanize(f.feature), humanize(f.priority), humanize(f.status)]),
+      { wrap: true }
+    );
+  }
+
+  doc.subheading("Patches & Updates");
+  if (releases.shipped.length === 0 && releases.upcoming.length === 0) {
+    doc.para(
+      "No releases were recorded for this project. Record releases under Analytics -> Releases (or from the CI deploy hook) to build the patch calendar.",
+      { color: THEME.muted, size: 8.5 }
+    );
+  } else {
+    doc.table(
+      makeCols(cw, [{ label: "Version", frac: 0.14 }, { label: "Type", frac: 0.12 }, { label: "Date", frac: 0.16 }, { label: "Status", frac: 0.13 }, { label: "Summary", align: "left" }]),
+      [
+        ...releases.shipped.map((r) => [
+          r.version,
+          humanize(r.kind),
+          fmtDate(r.releasedAt),
+          "Released",
+          `${r.title || "-"}${r.feedbackDone ? ` (closes ${r.feedbackDone} feedback item${r.feedbackDone === 1 ? "" : "s"})` : ""}`,
+        ]),
+        ...releases.upcoming.map((r) => [r.version, humanize(r.kind), r.plannedFor ? fmtDate(r.plannedFor) : "TBD", "Planned", r.title || "-"]),
+      ],
+      { wrap: true }
+    );
+  }
 }
 
 function optimizationPriorityColor(priority: string): PdfColor {

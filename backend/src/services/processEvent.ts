@@ -15,6 +15,7 @@ import { broadcastSse } from "../sse/hub.js";
 import { SERVICES, type ServiceName } from "../constants.js";
 import type { DbQueryable } from "./slidingWindow.js";
 import { incidentLink, notifySlack } from "./notifications/slack.js";
+import { emailIncidentAlert } from "./notifications/incidentEmail.js";
 import { sanitizePgText, sanitizePgTextOpt } from "./redactBodies.js";
 
 function sanitizePersist(raw: PersistEventInput): PersistEventInput {
@@ -263,14 +264,14 @@ export async function persistAndProcessEvent(
 
     if (isKnownService(raw.service)) {
       errorRate = await getErrorRateLast5Minutes(client, raw.service);
-      display = errorRateToDisplayStatus(errorRate);
+      display = errorRateToDisplayStatus(errorRate, raw.service);
 
       upstreamRate = await getErrorRateLast5MinutesForUpstream(
         client,
         raw.service,
         raw.upstream_key
       );
-      upstreamDisplay = errorRateToDisplayStatus(upstreamRate);
+      upstreamDisplay = errorRateToDisplayStatus(upstreamRate, raw.service);
 
       const prevRow = await client.query<{ prev_display_status: string }>(
         `SELECT prev_display_status FROM service_health_state WHERE service = $1 FOR UPDATE`,
@@ -349,6 +350,7 @@ export async function persistAndProcessEvent(
       void notifySlack(
         `:rotating_light: *${incidentBroadcast.severity}* — ${incidentBroadcast.title}\n${incidentLink(incidentBroadcast.id)}`
       );
+      void emailIncidentAlert("opened", incidentBroadcast);
     } else {
       broadcastSse("incident_updated", {
         id: incidentBroadcast.id,
@@ -359,6 +361,7 @@ export async function persistAndProcessEvent(
       void notifySlack(
         `:arrow_up: *${incidentBroadcast.severity}* (escalated) — ${incidentBroadcast.title}\n${incidentLink(incidentBroadcast.id)}`
       );
+      void emailIncidentAlert("escalated", incidentBroadcast);
     }
   }
 

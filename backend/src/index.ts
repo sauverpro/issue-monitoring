@@ -31,6 +31,9 @@ import { consoleAdminRouter } from "./routes/consoleAdmin.js";
 import { monitorIngestRouter } from "./routes/monitorIngest.js";
 import { sdkPackagesRouter } from "./routes/sdkPackages.js";
 import { deviceOrigins } from "./services/lanHost.js";
+import { consoleProductOpsRouter } from "./routes/consoleProductOps.js";
+import { consoleReliabilityRouter } from "./routes/consoleReliability.js";
+import { startReportScheduler } from "./services/reportSchedules.js";
 
 const app = express();
 
@@ -75,12 +78,15 @@ app.use(consoleAuthRouter(pool));
 app.use(consoleOrgsRouter(pool));
 app.use(consoleProjectsRouter(pool));
 app.use(consoleAdminRouter(pool));
+app.use(consoleProductOpsRouter(pool));
+app.use(consoleReliabilityRouter(pool));
 app.use(monitorIngestRouter(pool));
 
 startRecoveryScheduler(pool);
 startSentrySyncScheduler(pool);
 startRetentionScheduler(pool);
 startSyntheticPingScheduler(pool);
+startReportScheduler(pool);
 
 app.use(
   (

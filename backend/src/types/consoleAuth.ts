@@ -23,4 +23,8 @@ export type ProjectUpstream = {
   slug: string;
   host: string;
   label: string;
+  /** payments | core | digital-services | other */
+  category: string;
+  /** For payment channels: primary rail or backup (e.g. mobile money). */
+  channelRole: string | null;
 };

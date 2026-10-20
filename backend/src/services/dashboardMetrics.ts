@@ -153,7 +153,7 @@ export async function getDashboardMetrics(
   const services: DashboardPayload["services"] = {};
   for (const svc of SERVICES) {
     const rate5m = await getErrorRateLast5Minutes(pool, svc);
-    const status = errorRateToDisplayStatus(rate5m);
+    const status = errorRateToDisplayStatus(rate5m, svc);
     const lastSeen = await getLastSeenIso(pool, svc);
 
     const agg = await pool.query<{
@@ -268,7 +268,7 @@ export async function getDashboardMetrics(
       id: row.upstream_key,
       label: row.upstream_key,
       subtitle: row.service,
-      status: errorRateToDisplayStatus(rate5m),
+      status: errorRateToDisplayStatus(rate5m, row.service),
       error_rate_5m: rate5m,
       error_rate_window: Number(row.er),
       p50: Math.round(Number(row.p50)),

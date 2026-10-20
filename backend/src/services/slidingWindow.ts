@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import {
   RATE_DEGRADED_MIN,
   RATE_DOWN_MIN,
+  thresholdsFor,
   type ServiceName,
 } from "../constants.js";
 
@@ -13,9 +14,11 @@ export function isRequestError(statusCode: number): boolean {
 
 export type DisplayStatus = "operational" | "degraded" | "down";
 
-export function errorRateToDisplayStatus(errorRate: number): DisplayStatus {
-  if (errorRate >= RATE_DOWN_MIN) return "down";
-  if (errorRate >= RATE_DEGRADED_MIN) return "degraded";
+/** `service` selects per-service thresholds (payments are stricter); omitted → defaults. */
+export function errorRateToDisplayStatus(errorRate: number, service?: string | null): DisplayStatus {
+  const t = service ? thresholdsFor(service) : { degraded: RATE_DEGRADED_MIN, down: RATE_DOWN_MIN };
+  if (errorRate >= t.down) return "down";
+  if (errorRate >= t.degraded) return "degraded";
   return "operational";
 }
 
@@ -117,7 +120,7 @@ export async function listUpstreamHealth(
   return r.rows.map((row) => ({
     service: row.service,
     upstream_key: row.upstream_key,
-    status: errorRateToDisplayStatus(Number(row.er)),
+    status: errorRateToDisplayStatus(Number(row.er), row.service),
     error_rate_5m: Number(row.er),
     last_seen: row.last_seen ? row.last_seen.toISOString() : null,
     last_outcome:

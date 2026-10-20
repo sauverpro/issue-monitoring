@@ -127,6 +127,53 @@ describe("monitor executive report PDF", () => {
     assert.ok(Number(pageCountMatch![1]) >= 6, "expected the narrative content to span multiple pages");
   });
 
+  it("adds the feature adoption, feedback and releases section when product data is given", () => {
+    const base = { projectName: "Marketplace", overview: overview as any, funnels: funnels as any, retention: retention as any, dashboard, problems, performance, behavior };
+    const step = (label: string, users: number, failedUsers = 0) => ({ label, type: "api" as const, users, failedUsers, conversionFromStart: users / 494, conversionFromPrev: 1 });
+    const buffer = renderExecutiveReportPdf({
+      ...base,
+      product: {
+        featureFunnels: [
+          {
+            name: "Stock ordering",
+            feature: "ordering",
+            result: {
+              steps: [step("Order previewed", 494), step("Order placed", 128, 4), step("Delivery received", 47)],
+              started: 494,
+              completed: 47,
+              completionRate: 47 / 494,
+              medianCompletionMs: 2_280_000,
+              biggestDrop: { from: "Order previewed", to: "Order placed", lost: 366, rate: 366 / 494 },
+            },
+          },
+        ],
+        feedback: {
+          received: 12,
+          resolved: 5,
+          open: 9,
+          medianResolutionHours: 30,
+          byFeature: [{ feature: "ordering", total: 6, open: 4 }],
+          bySource: [{ source: "supervisor", total: 8 }, { source: "in_app", total: 4 }],
+          byCategory: [{ category: "bug", total: 7 }],
+          topOpen: [{ title: "Order total does not include delivery fee", feature: "ordering", priority: "high", status: "planned", createdAt: "2026-09-02T00:00:00.000Z" }],
+        },
+        releases: {
+          shipped: [{ version: "1.4.2", title: "Wallet stability fixes", kind: "patch", releasedAt: "2026-09-10T00:00:00.000Z", feedbackDone: 3 }],
+          upcoming: [{ version: "1.5.0", title: "Coupon redemption", kind: "minor", plannedFor: "2026-10-20" }],
+        },
+      },
+    });
+    const body = buffer.toString("latin1");
+    assert.ok(body.includes("Feature Adoption, Feedback & Releases"));
+    assert.ok(body.includes("Stock ordering"));
+    assert.ok(body.includes("Adoption blocked by failing calls"));
+    assert.ok(body.includes("1.4.2"));
+    assert.ok(body.includes("6. Recommendations"));
+    const without = renderExecutiveReportPdf(base).toString("latin1");
+    assert.ok(!without.includes("Feature Adoption, Feedback"));
+    assert.ok(without.includes("5. Recommendations"));
+  });
+
   it("still produces a valid PDF with mostly-empty data", () => {
     const emptyKpi = { value: 0, previous: 0, delta: null, sparkline: [0, 0] };
     const buffer = renderExecutiveReportPdf({

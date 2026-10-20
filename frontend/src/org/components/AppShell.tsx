@@ -16,13 +16,17 @@ import {
   LayoutDashboard,
   LogOut,
   Menu,
+  MessageSquare,
   MousePointerClick,
   Package,
   Plug,
+  Rocket,
   Route,
   Settings,
   Shield,
+  Siren,
   Users,
+  Wallet,
   X,
 } from "lucide-react";
 import { useAuth, orgHomePath, orgRoleFor, roleAtLeast } from "@/org/lib/auth";
@@ -148,6 +152,8 @@ function AppShellInner({ children }: { children: ReactNode }) {
     ? [
         { to: `${projectBase}/apis`, label: "API Monitor", icon: Globe },
         { to: `${projectBase}/problems`, label: "API Status", icon: AlertTriangle },
+        { to: `${projectBase}/incidents`, label: "Incidents", icon: Siren },
+        { to: `${projectBase}/payments`, label: "Payments", icon: Wallet },
         { to: `${projectBase}/performance`, label: "Performance", icon: Gauge },
       ]
     : [];
@@ -157,6 +163,13 @@ function AppShellInner({ children }: { children: ReactNode }) {
         { to: `${projectBase}/behavior`, label: "User Behavior", icon: MousePointerClick },
         { to: `${projectBase}/funnels`, label: "Funnels", icon: Filter },
         { to: `${projectBase}/reports`, label: "Reports", icon: BarChart3 },
+      ]
+    : [];
+
+  const productNav: NavItem[] = projectBase
+    ? [
+        { to: `${projectBase}/feedback`, label: "Feedback", icon: MessageSquare },
+        { to: `${projectBase}/releases`, label: "Releases", icon: Rocket },
       ]
     : [];
 
@@ -237,6 +250,7 @@ function AppShellInner({ children }: { children: ReactNode }) {
         {usersNav.length > 0 && <NavSection title="Users" items={usersNav} collapsed={collapsed} />}
         {appNav.length > 0 && <NavSection title="Application" items={appNav} collapsed={collapsed} />}
         {analyticsNav.length > 0 && <NavSection title="Analytics" items={analyticsNav} collapsed={collapsed} />}
+        {productNav.length > 0 && <NavSection title="Product" items={productNav} collapsed={collapsed} />}
         {manageNav.length > 0 && <NavSection title="Management" items={manageNav} collapsed={collapsed} />}
         {!collapsed && orgId && projects.length > 0 && (
           <div className="space-y-1">

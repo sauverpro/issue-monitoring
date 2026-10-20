@@ -279,6 +279,49 @@ First interaction with a form.
 }
 ```
 
+## `POST /ingest/v1/feedback`
+
+In-app feedback from the instrumented app. It lands in the project's **Feedback** backlog with channel *In-app*.
+
+```json
+{
+  "message": "Coupon screen freezes after scanning
+Happens on Tecno phones",
+  "category": "bug",
+  "feature": "coupons",
+  "screen": "/voucher-management",
+  "session": { "id": "sess-123", "user_id": "agent-42", "email": "agent@example.rw", "name": "Jean" }
+}
+```
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `message` | yes | Up to 4000 chars. The first line becomes the title unless `title` is sent. |
+| `category` | no | `bug`, `request` (default), `complaint`, `question`, `praise` |
+| `feature` | no | Free tag, e.g. `ordering`, `contracting`, `coupons`. Defaults to `general`. |
+| `screen` | no | Appended to the details. |
+| `session` | no | Links the item to the agent's journey in the organization app. |
+
+Returns `201 { "ok": true, "id": "…" }`.
+
+## `POST /ingest/v1/releases`
+
+Deploy hook for the **Releases** patch calendar. Call it from CI after a successful deploy. If the version already exists (for example a planned release), it is marked released instead of duplicated.
+
+```bash
+curl -sS -X POST "$INGEST/releases"   -H "X-Monitor-Key: $KEY" -H "Content-Type: application/json"   -d '{"version":"1.5.0","title":"Coupon redemption","kind":"minor","commit_sha":"'"$GITHUB_SHA"'"}'
+```
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| `version` | yes | Unique per project. |
+| `title`, `notes` | no | Kept if the release already has them. |
+| `kind` | no | `major`, `minor`, `patch` (default), `hotfix` |
+| `commit_sha` | no | Shown on the release. |
+| `released_at` | no | ISO timestamp; defaults to now. |
+
+Returns `201` when created, `200` when an existing version was marked released.
+
 ## CORS
 
 The API uses `CORS_ORIGIN` (comma-separated). Browser pages that `fetch` ingest must list their origin there. Native and server clients ignore CORS.

@@ -24,6 +24,8 @@ import { TimeRangePicker } from "@/org/components/TimeRangePicker";
 import { encodeUserKey, formatDuration } from "@/org/lib/journey";
 import { BarChart, DonutChart, HorizontalBars, LineChart, Sparkline } from "@/org/components/charts";
 import { EmptyState, PageHeader, Panel } from "@/org/components/ui";
+import { ReportSchedules } from "@/org/components/ReportSchedules";
+import { useCanManage } from "@/org/lib/auth";
 
 type Kpi = { value: number; previous: number; delta: number | null; sparkline: number[] };
 type Daily = {
@@ -73,6 +75,7 @@ const TABS = [
   { id: "funnels", label: "Funnels" },
   { id: "retention", label: "Retention" },
   { id: "custom", label: "Custom Reports" },
+  { id: "scheduled", label: "Scheduled Emails" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -182,6 +185,7 @@ function PanelHead({ title, action }: { title: string; action?: ReactNode }) {
 
 export function ReportsPage() {
   const { orgId, projectId } = useParams();
+  const canManage = useCanManage(orgId);
   const [params, setParams] = useSearchParams();
   const { range, setPreset } = useRange();
   const from = range.customFrom;
@@ -400,6 +404,7 @@ export function ReportsPage() {
       {tab === "errors" && <ErrorsTab data={data} chart={chart} base={base} />}
       {tab === "funnels" && <FunnelsTab projectId={projectId!} query={query} />}
       {tab === "retention" && <RetentionTab projectId={projectId!} query={query} />}
+      {tab === "scheduled" && <ReportSchedules projectId={projectId!} canManage={canManage} />}
       {tab === "custom" && (
         <CustomTab
           onDownload={(d) => void download(d)}

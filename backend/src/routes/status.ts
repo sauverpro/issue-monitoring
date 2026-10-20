@@ -31,7 +31,7 @@ export function statusRouter(pool: Pool): IRouter {
     const services = await Promise.all(
       SERVICES.map(async (service) => {
         const rate = await getErrorRateLast5Minutes(pool, service);
-        const status = errorRateToDisplayStatus(rate);
+        const status = errorRateToDisplayStatus(rate, service);
         const lastSeen = await getLastSeenIso(pool, service);
         return { service, status, last_seen: lastSeen };
       })

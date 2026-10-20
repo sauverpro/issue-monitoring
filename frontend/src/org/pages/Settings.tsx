@@ -12,7 +12,7 @@ type KeyRow = {
   lastUsedAt: string | null;
 };
 
-type Upstream = { id: string; slug: string; host: string; label: string };
+type Upstream = { id: string; slug: string; host: string; label: string; category: string; channelRole: string | null };
 
 export function SettingsPage() {
   const { projectId } = useParams();
@@ -69,6 +69,16 @@ export function SettingsPage() {
     await load();
   }
 
+  async function updateUpstream(id: string, patch: { category?: string; channelRole?: string | null }) {
+    if (!projectId) return;
+    try {
+      await apiFetch(`/console/projects/${projectId}/upstreams/${id}`, { method: "PATCH", json: patch });
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Update failed");
+    }
+  }
+
   async function removeHost(id: string) {
     if (!projectId) return;
     await apiFetch(`/console/projects/${projectId}/upstreams/${id}`, { method: "DELETE" });
@@ -119,6 +129,9 @@ export function SettingsPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold">Allowed upstream hosts</h2>
+        <p className="text-xs text-zinc-500">
+          Tag payment rails as <em>Payments</em> so the Payments view and reports track them; mark mobile money or a second provider as the backup channel.
+        </p>
         <form onSubmit={addHost} className="flex flex-wrap gap-2">
           <input className="input w-40" placeholder="SLUG" value={slug} onChange={(e) => setSlug(e.target.value)} required />
           <input
@@ -134,13 +147,42 @@ export function SettingsPage() {
           <ul className="divide-y divide-zinc-100 text-sm dark:divide-zinc-800">
             {upstreams.map((u) => (
               <li key={u.id} className="flex items-center justify-between px-5 py-3">
-                <span>
+                <span className="min-w-0 flex-1">
                   <span className="font-medium">{u.slug}</span>
                   <span className="text-zinc-500"> · {u.host}</span>
                 </span>
-                <button type="button" className="text-red-600" onClick={() => void removeHost(u.id)}>
-                  Remove
-                </button>
+                <span className="flex items-center gap-2">
+                  <select
+                    className="input w-auto py-1 text-xs"
+                    aria-label={`${u.slug} category`}
+                    value={u.category}
+                    onChange={(e) =>
+                      void updateUpstream(u.id, {
+                        category: e.target.value,
+                        channelRole: e.target.value === "payments" ? (u.channelRole ?? "primary") : null,
+                      })
+                    }
+                  >
+                    <option value="payments">Payments</option>
+                    <option value="core">Core</option>
+                    <option value="digital-services">Digital services</option>
+                    <option value="other">Other</option>
+                  </select>
+                  {u.category === "payments" && (
+                    <select
+                      className="input w-auto py-1 text-xs"
+                      aria-label={`${u.slug} payment role`}
+                      value={u.channelRole ?? "primary"}
+                      onChange={(e) => void updateUpstream(u.id, { channelRole: e.target.value })}
+                    >
+                      <option value="primary">Primary channel</option>
+                      <option value="backup">Backup channel</option>
+                    </select>
+                  )}
+                  <button type="button" className="ml-2 text-red-600" onClick={() => void removeHost(u.id)}>
+                    Remove
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
