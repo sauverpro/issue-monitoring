@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
+import { Radio } from "lucide-react";
 import { apiFetch } from "@/org/lib/api";
 import { EmptyState, PageHeader, Panel } from "@/org/components/ui";
 
@@ -17,7 +18,7 @@ type Payload = {
 };
 
 export function ApisPage() {
-  const { projectId } = useParams();
+  const { orgId, projectId } = useParams();
   const [data, setData] = useState<Payload | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,6 +53,7 @@ export function ApisPage() {
               <th className="px-5 py-2">Failure</th>
               <th className="px-5 py-2">Other</th>
               <th className="px-5 py-2">Avg ms</th>
+              <th className="px-5 py-2" />
             </tr>
           </thead>
           <tbody>
@@ -63,11 +65,19 @@ export function ApisPage() {
                 <td className="px-5 py-3 tabular-nums text-red-600">{r.failure}</td>
                 <td className="px-5 py-3 tabular-nums text-amber-600">{r.other}</td>
                 <td className="px-5 py-3 tabular-nums">{r.avgLatencyMs}</td>
+                <td className="px-5 py-3 text-right">
+                  <Link
+                    to={`/orgs/${orgId}/projects/${projectId}/live?tab=traffic&service=${encodeURIComponent(r.service)}`}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                  >
+                    <Radio className="h-3.5 w-3.5" /> Live
+                  </Link>
+                </td>
               </tr>
             ))}
             {data.stats.length === 0 && (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <EmptyState title="No API calls yet" body="Traffic to allowed hosts will appear here." />
                 </td>
               </tr>

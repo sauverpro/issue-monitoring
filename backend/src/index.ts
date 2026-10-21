@@ -33,6 +33,7 @@ import { sdkPackagesRouter } from "./routes/sdkPackages.js";
 import { deviceOrigins } from "./services/lanHost.js";
 import { consoleProductOpsRouter } from "./routes/consoleProductOps.js";
 import { consoleReliabilityRouter } from "./routes/consoleReliability.js";
+import { consoleLiveRouter } from "./routes/consoleLive.js";
 import { startReportScheduler } from "./services/reportSchedules.js";
 
 const app = express();
@@ -74,6 +75,8 @@ app.use(sentrySyncRouter(pool));
 app.use(usersRouter(pool));
 app.use(uptimeRouter(pool));
 app.use(statusRouter(pool));
+// Before the other /console routers: they require a header JWT on every /console path.
+app.use(consoleLiveRouter(pool));
 app.use(consoleAuthRouter(pool));
 app.use(consoleOrgsRouter(pool));
 app.use(consoleProjectsRouter(pool));

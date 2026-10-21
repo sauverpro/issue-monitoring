@@ -27,6 +27,7 @@ import { FeedbackPage } from "@/org/pages/Feedback";
 import { ReleasesPage } from "@/org/pages/Releases";
 import { IncidentsPage } from "@/org/pages/Incidents";
 import { PaymentsPage } from "@/org/pages/Payments";
+import { LiveAgentsPage } from "@/org/pages/LiveAgents";
 import { PlatformAdminPage } from "@/platform/pages/Admin";
 import { PlatformPackagesPage } from "@/platform/pages/Packages";
 
@@ -276,6 +277,14 @@ export const orgRoutes = (
       element={
         <OrgProtected>
           <ReportsPage />
+        </OrgProtected>
+      }
+    />
+    <Route
+      path="/orgs/:orgId/projects/:projectId/live"
+      element={
+        <OrgProtected>
+          <LiveAgentsPage />
         </OrgProtected>
       }
     />

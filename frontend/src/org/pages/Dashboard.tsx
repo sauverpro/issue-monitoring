@@ -14,6 +14,7 @@ import { ResultClassBadge, SeverityBadge } from "@/org/components/monitor";
 import { BarChart, DonutChart, StackedOutcomeBars } from "@/org/components/charts";
 import { EmptyState, PageHeader, Panel, StatCard } from "@/org/components/ui";
 import { relativeTime } from "@/org/lib/journey";
+import { LiveOverview } from "@/org/components/LiveOverview";
 
 type ApiOpsRow = {
   service: string;
@@ -121,6 +122,14 @@ export function DashboardPage() {
     void load();
   }, [load]);
 
+  // The live section streams; refresh the period totals below it every minute too.
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 60_000);
+    return () => window.clearInterval(t);
+  }, [load]);
+
   if (error && !data) return <p className="text-red-600">{error}</p>;
   if (!data) return <p className="text-zinc-500">Loading…</p>;
 
@@ -166,6 +175,9 @@ export function DashboardPage() {
         </div>
       )}
 
+      <LiveOverview orgId={orgId!} projectId={projectId!} />
+
+      <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">Selected period</h2>
       <div className="mb-6">
         <SystemHealthStrip {...data.health} />
       </div>

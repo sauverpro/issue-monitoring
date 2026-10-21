@@ -402,6 +402,24 @@ sudo certbot renew --dry-run
 
 ---
 
+### 9.3 Live dashboard stream (SSE)
+
+The Overview and **Live** pages hold a Server-Sent Events connection open at
+`/console/projects/<id>/live/stream`. The Nginx block above already has what it needs
+(`proxy_buffering off`, `proxy_read_timeout 86400s`, `Connection ''`); keep those if you edit it.
+The server also sends `X-Accel-Buffering: no` and a heartbeat every 20 s.
+
+- **Run one PM2 instance.** Live stats and connected clients are kept in that process's memory.
+  Cluster mode (`instances > 1`) would split clients across processes.
+- **Frontend on Vercel:** the `/console/:path*` rewrite proxies the stream. If it disconnects every
+  few seconds, build the frontend with `VITE_STREAM_ORIGIN=https://monitor.soromafresh.com` so the
+  browser connects to the API directly. The frontend's origin must then be in `CORS_ORIGIN`.
+- **Check it on the server:**
+  ```bash
+  pm2 logs issue-monitor-api --lines 20   # no errors after opening the Overview page
+  ```
+  In the browser the Overview header should show a green **Live** dot within a few seconds.
+
 ## Step 10 — Verify
 
 ```bash

@@ -11,6 +11,8 @@ import {
 import { persistAndProcessEvent } from "./processEvent.js";
 import { persistSessionActions } from "./sessionActions.js";
 import { listProjectUpstreams } from "./tenancy.js";
+import { publishLiveEvent } from "../sse/liveHub.js";
+import { classifyHttpResult } from "./httpResultClass.js";
 import type { ResolvedProjectKey } from "./apiKeys.js";
 
 export type IngestResult = {
@@ -139,6 +141,12 @@ function describeJourneyEvent(
   }
 }
 
+/** Same precedence as the dashboards' user key: user id, then email, then session. */
+function liveUserKey(envelope: MonitorEnvelope): string {
+  const s = envelope.session;
+  return (s.user_id && String(s.user_id).trim()) || (s.email && s.email.trim()) || s.id;
+}
+
 export async function ingestMonitorEnvelope(
   pool: Pool,
   project: ResolvedProjectKey,
@@ -202,6 +210,24 @@ export async function ingestMonitorEnvelope(
       try {
         await persistAndProcessEvent(pool, payload);
         accepted += 1;
+        publishLiveEvent(project.projectId, {
+          id: eventId,
+          kind: "api",
+          at: ev.occurred_at,
+          sessionId: envelope.session.id,
+          userKey: liveUserKey(envelope),
+          email: envelope.session.email ?? null,
+          userId: envelope.session.user_id ?? null,
+          service,
+          method: payload.http_method ?? "GET",
+          path: payload.endpoint,
+          status: ev.status_code ?? null,
+          latencyMs: ev.latency_ms ?? null,
+          result: classifyHttpResult(ev.status_code, outcome),
+          screen: payload.current_screen ?? null,
+          platform: envelope.context?.platform ?? null,
+          appVersion: envelope.context?.app_version ?? null,
+        });
       } catch (err) {
         dropped += 1;
         console.error("[ingest/v1] api event dropped", eventId, err);
@@ -235,6 +261,20 @@ export async function ingestMonitorEnvelope(
       accepted += n > 0 ? 1 : 0;
       if (n === 0) dropped += 1;
       else {
+        publishLiveEvent(project.projectId, {
+          id: eventId,
+          kind: journeyKind,
+          at: ev.occurred_at,
+          sessionId: envelope.session.id,
+          userKey: liveUserKey(envelope),
+          email: envelope.session.email ?? null,
+          userId: envelope.session.user_id ?? null,
+          screen: described.screen ?? null,
+          fromScreen: described.fromScreen ?? null,
+          message: described.message,
+          platform: envelope.context?.platform ?? null,
+          appVersion: envelope.context?.app_version ?? null,
+        });
         await pool.query(
           `UPDATE user_sessions SET
              ended_at = GREATEST(ended_at, $2::timestamptz),

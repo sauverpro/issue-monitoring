@@ -19,6 +19,7 @@ import {
   MessageSquare,
   MousePointerClick,
   Package,
+  Radio,
   Plug,
   Rocket,
   Route,
@@ -137,7 +138,10 @@ function AppShellInner({ children }: { children: ReactNode }) {
     : [];
 
   const monitorNav: NavItem[] = projectBase
-    ? [{ to: `${projectBase}/overview`, label: "Overview", icon: LayoutDashboard, end: true }]
+    ? [
+        { to: `${projectBase}/overview`, label: "Overview", icon: LayoutDashboard, end: true },
+        { to: `${projectBase}/live`, label: "Live", icon: Radio },
+      ]
     : [];
 
   const usersNav: NavItem[] = projectBase

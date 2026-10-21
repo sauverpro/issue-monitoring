@@ -1,4 +1,5 @@
 import type { Response } from "express";
+import { relayGlobalEvent } from "./liveHub.js";
 
 type SseClient = { res: Response };
 
@@ -25,4 +26,6 @@ export function broadcastSse(event: string, data: unknown): void {
     }
   }
   dead.forEach((c) => clients.delete(c));
+  // Organization live dashboards get incident / status changes for their services too.
+  relayGlobalEvent(event, data);
 }

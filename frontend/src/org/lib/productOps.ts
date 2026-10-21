@@ -270,3 +270,122 @@ export function rateTone(rate: number | null, warn: number, bad: number): BadgeT
 export function fmtPct(v: number | null | undefined, digits = 1): string {
   return v == null ? "—" : `${(v * 100).toFixed(digits)}%`;
 }
+
+export type LiveEvent = {
+  id: string;
+  kind: string;
+  at: string;
+  sessionId: string;
+  userKey: string;
+  email: string | null;
+  userId: string | null;
+  service?: string;
+  method?: string;
+  path?: string;
+  status?: number | null;
+  latencyMs?: number | null;
+  result?: "success" | "client_failure" | "server_error" | "network";
+  screen?: string | null;
+  fromScreen?: string | null;
+  message?: string | null;
+  platform?: string | null;
+  appVersion?: string | null;
+};
+
+export type ServiceLive = {
+  service: string;
+  status: "operational" | "degraded" | "down" | "idle";
+  calls1m: number;
+  errors1m: number;
+  errorRate1m: number | null;
+  errorRate5m: number | null;
+  calls5m: number;
+  p95Ms1m: number | null;
+  avgMs1m: number | null;
+  agents1m: number;
+  series: { calls: number; errors: number }[];
+};
+
+export type LiveSnapshot = {
+  at: string;
+  agentsOnline: number;
+  callsPerMin: number;
+  errorsPerMin: number;
+  services: ServiceLive[];
+};
+
+export type AgentPresence = {
+  userKey: string;
+  email: string | null;
+  userId: string | null;
+  sessionId: string;
+  lastAt: number;
+  firstAt: number;
+  lastScreen: string | null;
+  lastAction: string;
+  events: number;
+  apiCalls: number;
+  errors: number;
+  platform: string | null;
+  appVersion: string | null;
+  online: boolean;
+};
+
+export type LiveEventDetail = {
+  event: LiveEvent;
+  api?: {
+    url: string | null;
+    requestBody: string | null;
+    responseBody: string | null;
+    failureReason: string | null;
+    errorCode: string | null;
+    upstreamKey: string | null;
+  };
+  payload?: Record<string, unknown> | null;
+  session: {
+    id: string;
+    startedAt: string | null;
+    endedAt: string | null;
+    platform: string | null;
+    os: string | null;
+    appVersion: string | null;
+    network: string | null;
+    totalEvents: number | null;
+    failureEvents: number | null;
+  } | null;
+  screenPath: { screen: string; at: string }[];
+  around: LiveEvent[];
+};
+
+export function isFailure(e: LiveEvent): boolean {
+  return e.kind === "api" && e.result != null && e.result !== "success";
+}
+
+export function describeLive(e: LiveEvent): string {
+  if (e.kind === "api") return `${e.method ?? "GET"} ${e.path ?? "/"}`;
+  if (e.kind === "navigation" || e.kind === "screen_view") {
+    return e.fromScreen ? `${e.fromScreen} → ${e.screen ?? "?"}` : `Opened ${e.screen ?? "screen"}`;
+  }
+  return e.message || e.screen || e.kind;
+}
+
+export function agentLabel(a: { email: string | null; userId: string | null; userKey: string }): string {
+  return a.email || a.userId || a.userKey;
+}
+
+export function fmtClock(iso: string): string {
+  return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
+}
+
+export function agoShort(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
+}
+
+export function plural(n: number, word: string): string {
+  return `${n.toLocaleString()} ${word}${n === 1 ? "" : "s"}`;
+}

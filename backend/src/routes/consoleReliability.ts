@@ -5,7 +5,14 @@ import { asyncRouter } from "./asyncRouter.js";
 import { requireConsoleJwt } from "../middleware/consoleJwt.js";
 import { requireProject } from "../middleware/consoleAuth.js";
 import { reportQueryRange } from "../services/monitorReports.js";
-import { getIncidentDetail, getIncidentReport, getPaymentsReport, projectServices } from "../services/reliability.js";
+import {
+  getIncidentDetail,
+  getIncidentReport,
+  getPaymentEndpointDetail,
+  getPaymentsReport,
+  projectServices,
+} from "../services/reliability.js";
+import { listProjectUpstreams } from "../services/tenancy.js";
 import { broadcastSse } from "../sse/hub.js";
 import { incidentLink, notifySlack } from "../services/notifications/slack.js";
 import { emailIncidentAlert } from "../services/notifications/incidentEmail.js";
@@ -109,6 +116,26 @@ export function consoleReliabilityRouter(pool: Pool): IRouter {
 
   r.get(`${base}/payments`, requireProject(pool, "viewer"), async (req, res) => {
     res.json(await getPaymentsReport(pool, req.params.projectId!, reportQueryRange(req.query)));
+  });
+
+  /** One payment endpoint (or whole channel): status breakdown, trend and affected agents. */
+  r.get(`${base}/payments/endpoint`, requireProject(pool, "viewer"), async (req, res) => {
+    const service = typeof req.query.service === "string" ? req.query.service.trim().toUpperCase() : "";
+    const channels = (await listProjectUpstreams(pool, req.params.projectId!)).filter((u) => u.category === "payments");
+    if (!channels.some((c) => c.slug === service)) {
+      res.status(404).json({ error: "Not a payment channel on this project" });
+      return;
+    }
+    const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+    res.json(
+      await getPaymentEndpointDetail(pool, req.params.projectId!, reportQueryRange(req.query), {
+        service,
+        method: typeof req.query.method === "string" && req.query.method ? req.query.method : undefined,
+        path: typeof req.query.path === "string" && req.query.path ? req.query.path : undefined,
+        status: statusRaw === undefined || statusRaw === "" ? undefined : statusRaw === "0" ? null : Number(statusRaw),
+        search: typeof req.query.search === "string" && req.query.search.trim() ? req.query.search.trim() : undefined,
+      })
+    );
   });
 
   /** Tag an upstream as a payment channel (primary / backup) or another category. */
