@@ -55,6 +55,13 @@ jobs:
 
       - name: Run tests
         run: npm test -w backend
+        # config.ts requires these at import time; the unit tests never connect,
+        # so placeholders are enough (there is no .env in CI).
+        env:
+          DATABASE_URL: postgres://ci:ci@127.0.0.1:5432/ci
+          INGEST_API_KEY: ci-ingest-key
+          JWT_SECRET: ci-jwt-secret
+          TZ: UTC
 
   # ── Job 2: Deploy to VPS via SSH ─────────────────────────────────────────────
   deploy:
