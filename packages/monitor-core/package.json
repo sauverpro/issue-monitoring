@@ -1,7 +1,7 @@
 {
   "name": "@koralink/monitor-core",
   "version": "0.1.0",
-  "description": "Koralink Monitor SDK core — queue, allowlist, envelope",
+  "description": "Koralink Monitor SDK core \u2014 queue, allowlist, envelope",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -11,9 +11,11 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "node init && tsc -p tsconfig.build.json",
     "test": "node --import tsx --test src/outcome.test.ts src/hosts.test.ts"
   },
   "publishConfig": {

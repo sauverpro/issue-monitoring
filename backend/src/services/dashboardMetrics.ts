@@ -102,7 +102,7 @@ async function sparklineForScope(
          (floor(extract(epoch FROM occurred_at) / $${params.length + 1}::float8) * $${params.length + 1}::float8)
          * interval '1 second') AS bucket,
        COUNT(*)::text AS c
-     FROM api_events
+     FROM api_events_real
      WHERE occurred_at >= now() - $${params.length + 2}::interval AND ${whereSql}
      GROUP BY 1 ORDER BY 1 ASC`,
     [...params, bucketSec, interval]
@@ -135,7 +135,7 @@ export async function getDashboardMetrics(
        COUNT(*) FILTER (WHERE outcome = 'SUCCESS')::text AS success,
        COUNT(*) FILTER (WHERE outcome = 'FAILURE')::text AS failure,
        COUNT(*) FILTER (WHERE outcome = 'OTHER')::text AS other
-     FROM api_events
+     FROM api_events_real
      WHERE occurred_at >= now() - $1::interval`,
     [interval]
   );
@@ -167,7 +167,7 @@ export async function getDashboardMetrics(
          COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms), 0)::text AS p95,
          COUNT(*)::text AS total,
          COALESCE(AVG(CASE WHEN outcome IN ('FAILURE', 'OTHER') THEN 1.0 ELSE 0 END), 0)::text AS er
-       FROM api_events
+       FROM api_events_real
        WHERE service = $1 AND occurred_at >= now() - $2::interval`,
       [svc, interval]
     );
@@ -215,7 +215,7 @@ export async function getDashboardMetrics(
             COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms), 0)::text AS p50,
             COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms), 0)::text AS p95,
             MAX(occurred_at) AS last_seen
-     FROM api_events
+     FROM api_events_real
      WHERE occurred_at >= now() - $1::interval AND upstream_key IS NOT NULL
      GROUP BY upstream_key
      ORDER BY COUNT(*) DESC
@@ -251,7 +251,7 @@ export async function getDashboardMetrics(
   for (const row of upstreamKeysR.rows) {
     const er5m = await pool.query<{ er: string }>(
       `SELECT COALESCE(AVG(CASE WHEN outcome IN ('FAILURE', 'OTHER') THEN 1.0 ELSE 0 END), 0)::text AS er
-       FROM api_events
+       FROM api_events_real
        WHERE upstream_key = $1 AND occurred_at >= now() - interval '5 minutes'`,
       [row.upstream_key]
     );
@@ -309,7 +309,7 @@ export async function getDashboardMetrics(
                 COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms), 0)::text AS p50,
                 COALESCE(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms), 0)::text AS p95,
                 MAX(occurred_at) AS last_seen
-         FROM api_events
+         FROM api_events_real
          WHERE occurred_at >= now() - $1::interval
            AND (upstream_key = $2 OR request_url ILIKE $3)`,
         [interval, d.id, hostPat]
@@ -318,7 +318,7 @@ export async function getDashboardMetrics(
       if (m && Number(m.total) > 0) {
         const er5mR = await pool.query<{ er: string }>(
           `SELECT COALESCE(AVG(CASE WHEN outcome IN ('FAILURE', 'OTHER') THEN 1.0 ELSE 0 END), 0)::text AS er
-           FROM api_events
+           FROM api_events_real
            WHERE occurred_at >= now() - interval '5 minutes'
              AND (upstream_key = $1 OR request_url ILIKE $2)`,
           [d.id, hostPat]

@@ -259,7 +259,7 @@ async function fetchStepHits(
   }
   const q = await pool.query<{ user_key: string; at: Date; ok: boolean }>(
     `SELECT ${API_USER_SQL} AS user_key, e.occurred_at AS at, ${API_OK_SQL} AS ok
-     FROM api_events e
+     FROM api_events_real e
      LEFT JOIN user_sessions us ON us.session_id = e.session_id
      WHERE e.project_id = $1
        AND e.occurred_at >= $2 AND e.occurred_at <= $3

@@ -34,7 +34,7 @@ export async function getErrorRateLast5Minutes(
         ELSE (COUNT(*) FILTER (WHERE outcome IN ('FAILURE', 'OTHER')))::float8
           / NULLIF(COUNT(*)::float8, 0)
       END AS er
-     FROM api_events
+     FROM api_events_real
      WHERE service = $1 AND occurred_at >= now() - interval '5 minutes'`,
     [service]
   );
@@ -53,7 +53,7 @@ export async function getErrorRateLast5MinutesForUpstream(
         ELSE (COUNT(*) FILTER (WHERE outcome IN ('FAILURE', 'OTHER')))::float8
           / NULLIF(COUNT(*)::float8, 0)
       END AS er
-     FROM api_events
+     FROM api_events_real
      WHERE service = $1 AND upstream_key = $2
        AND occurred_at >= now() - interval '5 minutes'`,
     [service, upstreamKey]
@@ -66,7 +66,7 @@ export async function getLastSeenIso(
   service: ServiceName
 ): Promise<string | null> {
   const r = await db.query<{ m: Date | null }>(
-    `SELECT MAX(occurred_at) AS m FROM api_events WHERE service = $1`,
+    `SELECT MAX(occurred_at) AS m FROM api_events_real WHERE service = $1`,
     [service]
   );
   const m = r.rows[0]?.m;
@@ -104,14 +104,14 @@ export async function listUpstreamHealth(
           ELSE (COUNT(*) FILTER (WHERE e.outcome IN ('FAILURE', 'OTHER')))::float8
             / NULLIF(COUNT(*)::float8, 0)
           END
-         FROM api_events e
+         FROM api_events_real e
          WHERE e.service = h.service AND e.upstream_key = h.upstream_key
            AND e.occurred_at >= now() - interval '5 minutes'),
         0
       )::text AS er,
-      (SELECT MAX(e2.occurred_at) FROM api_events e2
+      (SELECT MAX(e2.occurred_at) FROM api_events_real e2
        WHERE e2.service = h.service AND e2.upstream_key = h.upstream_key) AS last_seen,
-      (SELECT e3.outcome FROM api_events e3
+      (SELECT e3.outcome FROM api_events_real e3
        WHERE e3.service = h.service AND e3.upstream_key = h.upstream_key
        ORDER BY e3.occurred_at DESC LIMIT 1) AS last_outcome
      FROM upstream_health_state h

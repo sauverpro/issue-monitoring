@@ -44,8 +44,14 @@ export function pdfString(value: string): string {
   return `${out})`;
 }
 
-export function measureText(text: string, size: number, bold = false): number {
-  return pdfSafe(text).length * size * (bold ? 0.55 : 0.5);
+export function measureText(text: string, size: number, bold = false, tracking = 0): number {
+  const n = pdfSafe(text).length;
+  return n * size * (bold ? 0.55 : 0.5) + Math.max(0, n - 1) * tracking;
+}
+
+/** Mix two colours: t = 0 gives `a`, t = 1 gives `b`. */
+export function mixColor(a: PdfColor, b: PdfColor, t: number): PdfColor {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 }
 
 export function truncateText(text: string, size: number, maxWidth: number, bold = false): string {
@@ -81,13 +87,39 @@ type TextOpts = {
   color?: PdfColor;
   align?: "left" | "right" | "center";
   maxWidth?: number;
+  /** Extra space between characters (points), for small-caps style labels. */
+  tracking?: number;
 };
+
+/** A JPEG to embed as an image XObject. */
+export type PdfImage = { data: Buffer; width: number; height: number; components: number };
+
+/** Reads the pixel size and colour components from a JPEG's SOF marker; null if not a baseline/progressive JPEG. */
+export function readJpeg(data: Buffer): PdfImage | null {
+  if (data.length < 4 || data[0] !== 0xff || data[1] !== 0xd8) return null;
+  let i = 2;
+  while (i + 9 < data.length) {
+    if (data[i] !== 0xff) {
+      i += 1;
+      continue;
+    }
+    const marker = data[i + 1]!;
+    const len = data.readUInt16BE(i + 2);
+    const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+    if (isSof) {
+      return { data, height: data.readUInt16BE(i + 5), width: data.readUInt16BE(i + 7), components: data[i + 9]! };
+    }
+    i += 2 + len;
+  }
+  return null;
+}
 
 export class SimplePdf {
   readonly w: number;
   readonly h: number;
   private pages: string[][] = [];
   private pageIndex = 0;
+  private images: PdfImage[] = [];
 
   constructor(size: { w: number; h: number } = A4_LANDSCAPE) {
     this.w = size.w;
@@ -156,18 +188,86 @@ export class SimplePdf {
     this.op(`${cmd} h ${mode}`);
   }
 
+  /**
+   * Rectangle with rounded corners. `corners` limits rounding to the top or left
+   * edge (e.g. a table header or a card's accent strip).
+   */
+  roundRect(
+    x: number,
+    yFromTop: number,
+    w: number,
+    h: number,
+    r: number,
+    mode: "f" | "S" | "B" = "f",
+    corners: "all" | "top" | "bottom" | "left" = "all"
+  ): void {
+    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    if (rr === 0) {
+      this.rect(x, yFromTop, w, h, mode);
+      return;
+    }
+    const tl = corners === "all" || corners === "top" || corners === "left" ? rr : 0;
+    const tr = corners === "all" || corners === "top" ? rr : 0;
+    const br = corners === "all" || corners === "bottom" ? rr : 0;
+    const bl = corners === "all" || corners === "bottom" || corners === "left" ? rr : 0;
+    const k = 0.5523;
+    const top = this.ty(yFromTop);
+    const bot = this.ty(yFromTop + h);
+    const right = x + w;
+    let d = `${n(x + tl)} ${n(top)} m ${n(right - tr)} ${n(top)} l `;
+    if (tr) d += `${n(right - tr + tr * k)} ${n(top)} ${n(right)} ${n(top - tr + tr * k)} ${n(right)} ${n(top - tr)} c `;
+    d += `${n(right)} ${n(bot + br)} l `;
+    if (br) d += `${n(right)} ${n(bot + br - br * k)} ${n(right - br + br * k)} ${n(bot)} ${n(right - br)} ${n(bot)} c `;
+    d += `${n(x + bl)} ${n(bot)} l `;
+    if (bl) d += `${n(x + bl - bl * k)} ${n(bot)} ${n(x)} ${n(bot + bl - bl * k)} ${n(x)} ${n(bot + bl)} c `;
+    d += `${n(x)} ${n(top - tl)} l `;
+    if (tl) d += `${n(x)} ${n(top - tl + tl * k)} ${n(x + tl - tl * k)} ${n(top)} ${n(x + tl)} ${n(top)} c `;
+    this.op(`${d}h ${mode}`);
+  }
+
+  /** Circle approximated with four cubic Bezier curves. */
+  circle(cx: number, cyFromTop: number, r: number, mode: "f" | "S" | "B" = "f"): void {
+    const k = 0.5523 * r;
+    const cy = this.ty(cyFromTop);
+    this.op(
+      `${n(cx + r)} ${n(cy)} m ` +
+        `${n(cx + r)} ${n(cy + k)} ${n(cx + k)} ${n(cy + r)} ${n(cx)} ${n(cy + r)} c ` +
+        `${n(cx - k)} ${n(cy + r)} ${n(cx - r)} ${n(cy + k)} ${n(cx - r)} ${n(cy)} c ` +
+        `${n(cx - r)} ${n(cy - k)} ${n(cx - k)} ${n(cy - r)} ${n(cx)} ${n(cy - r)} c ` +
+        `${n(cx + k)} ${n(cy - r)} ${n(cx + r)} ${n(cy - k)} ${n(cx + r)} ${n(cy)} c h ${mode}`
+    );
+  }
+
+  /** Draws a JPEG scaled into the box (aspect ratio kept, left-aligned, vertically centred). */
+  image(img: PdfImage, x: number, yFromTop: number, maxW: number, maxH: number): { w: number; h: number } {
+    let idx = this.images.indexOf(img);
+    if (idx < 0) {
+      this.images.push(img);
+      idx = this.images.length - 1;
+    }
+    const scale = Math.min(maxW / img.width, maxH / img.height);
+    const w = img.width * scale;
+    const h = img.height * scale;
+    const top = yFromTop + (maxH - h) / 2;
+    this.op(`q ${n(w)} 0 0 ${n(h)} ${n(x)} ${n(this.ty(top + h))} cm /Im${idx + 1} Do Q`);
+    return { w, h };
+  }
+
   text(value: string, x: number, yFromTop: number, opts: TextOpts = {}): void {
     const size = opts.size ?? 10;
     const bold = opts.bold ?? false;
+    const tracking = opts.tracking ?? 0;
     let str = pdfSafe(value);
     if (opts.maxWidth) str = truncateText(str, size, opts.maxWidth, bold);
-    const width = measureText(str, size, bold);
+    const width = measureText(str, size, bold, tracking);
     let drawX = x;
     if (opts.align === "right") drawX = x - width;
     if (opts.align === "center") drawX = x - width / 2;
     if (opts.color) this.fill(opts.color);
     const baseline = this.ty(yFromTop) - size * 0.78;
-    this.op(`BT /${bold ? "F2" : "F1"} ${n(size)} Tf ${n(drawX)} ${n(baseline)} Td ${pdfString(str)} Tj ET`);
+    // Tc persists in the text state, so always set it (0 resets earlier tracking).
+    const tc = `${n(tracking)} Tc `;
+    this.op(`BT /${bold ? "F2" : "F1"} ${n(size)} Tf ${tc}${n(drawX)} ${n(baseline)} Td ${pdfString(str)} Tj ET`);
   }
 
   /** Word-wraps and draws a multi-line block; returns the y position just below the last line. */
@@ -195,7 +295,7 @@ export class SimplePdf {
 
   toBuffer(): Buffer {
     const streams = this.pages.map((ops) => ops.join("\n"));
-    return assemblePdf(this.w, this.h, streams);
+    return assemblePdf(this.w, this.h, streams, this.images);
   }
 }
 
@@ -203,9 +303,10 @@ function n(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
-function assemblePdf(w: number, h: number, streams: string[]): Buffer {
+function assemblePdf(w: number, h: number, streams: string[], images: PdfImage[] = []): Buffer {
   const pageCount = streams.length;
   let nextId = 5;
+  const imageIds = images.map(() => nextId++);
   const contentIds: number[] = [];
   const pageIds: number[] = [];
   for (let i = 0; i < pageCount; i++) {
@@ -218,6 +319,13 @@ function assemblePdf(w: number, h: number, streams: string[]): Buffer {
   objects[2] = `<< /Type /Pages /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pageCount} >>`;
   objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>";
   objects[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>";
+  images.forEach((img, i) => {
+    const cs = img.components === 1 ? "/DeviceGray" : img.components === 4 ? "/DeviceCMYK" : "/DeviceRGB";
+    objects[imageIds[i]!] =
+      `<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace ${cs} ` +
+      `/BitsPerComponent 8 /Filter /DCTDecode /Length ${img.data.length} >>\nstream\n${img.data.toString("latin1")}\nendstream`;
+  });
+  const xobjects = images.length ? ` /XObject << ${images.map((_, i) => `/Im${i + 1} ${imageIds[i]} 0 R`).join(" ")} >>` : "";
 
   for (let i = 0; i < pageCount; i++) {
     const stream = streams[i]!;
@@ -225,7 +333,7 @@ function assemblePdf(w: number, h: number, streams: string[]): Buffer {
     objects[contentIds[i]!] = `<< /Length ${length} >>\nstream\n${stream}\nendstream`;
     objects[pageIds[i]!] =
       `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] ` +
-      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentIds[i]} 0 R >>`;
+      `/Resources << /Font << /F1 3 0 R /F2 4 0 R >>${xobjects} >> /Contents ${contentIds[i]} 0 R >>`;
   }
 
   let out = "%PDF-1.4\n%\xE2\xE3\xCF\xD3\n";
