@@ -120,7 +120,9 @@ describe("monitor executive report PDF", () => {
     assert.ok(body.includes("System Health"));
     assert.ok(body.includes("API Performance"));
     assert.ok(body.includes("Recommendations"));
-    assert.ok(body.includes("Success Criteria"));
+    assert.ok(body.includes("Success criteria"));
+    assert.ok(body.includes("Report at a Glance"));
+    assert.ok(body.includes("Glossary"));
     assert.ok(body.includes("Marketplace"));
     const pageCountMatch = body.match(/\/Count (\d+)/);
     assert.ok(pageCountMatch, "expected a page count in the PDF");
@@ -164,13 +166,13 @@ describe("monitor executive report PDF", () => {
       },
     });
     const body = buffer.toString("latin1");
-    assert.ok(body.includes("Feature Adoption, Feedback & Releases"));
+    assert.ok(body.includes("Feature adoption"));
     assert.ok(body.includes("Stock ordering"));
-    assert.ok(body.includes("Adoption blocked by failing calls"));
+    assert.ok(body.includes("Feedback & releases"));
     assert.ok(body.includes("1.4.2"));
-    assert.ok(body.includes("6. Recommendations"));
     const without = renderExecutiveReportPdf(base).toString("latin1");
-    assert.ok(!without.includes("Feature Adoption, Feedback"));
+    assert.ok(!without.includes("Feature adoption"));
+    assert.ok(!without.includes("Feedback & releases"));
     assert.ok(without.includes("5. Recommendations"));
   });
 

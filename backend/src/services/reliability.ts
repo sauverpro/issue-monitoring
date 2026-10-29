@@ -65,6 +65,9 @@ export type ServiceReliability = {
   downtimeMinutes: number;
   availability: number;
   medianResolutionMinutes: number | null;
+  meanResolutionMinutes: number | null;
+  longestMinutes: number | null;
+  bySeverity: Record<string, number>;
   lastIncidentAt: string | null;
 };
 
@@ -168,7 +171,7 @@ export async function getIncidentReport(pool: Pool, projectId: string, range: Da
      FROM incidents i
      LEFT JOIN LATERAL (
        SELECT COUNT(DISTINCT ${USER_SQL})::text AS users_affected, COUNT(*)::text AS failed_calls
-       FROM api_events e
+       FROM api_events_real e
        WHERE e.service = i.service
          AND e.occurred_at >= i.opened_at - interval '5 minutes'
          AND e.occurred_at <= COALESCE(i.resolved_at, now())
@@ -192,7 +195,7 @@ export async function getIncidentReport(pool: Pool, projectId: string, range: Da
   const usersQ = await pool.query<{ n: string }>(
     `SELECT COUNT(DISTINCT ${USER_SQL})::text AS n
      FROM incidents i
-     JOIN api_events e ON e.service = i.service
+     JOIN api_events_real e ON e.service = i.service
        AND e.occurred_at >= i.opened_at - interval '5 minutes'
        AND e.occurred_at <= COALESCE(i.resolved_at, now())
      WHERE i.service = ANY($1) AND i.opened_at <= $3 AND (i.resolved_at IS NULL OR i.resolved_at >= $2)
@@ -214,6 +217,9 @@ export async function getIncidentReport(pool: Pool, projectId: string, range: Da
       downtimeMinutes: s.downtimeMinutes,
       availability: Math.max(0, 1 - s.downtimeMinutes / rangeMinutes),
       medianResolutionMinutes: s.medianResolutionMinutes,
+      meanResolutionMinutes: s.meanResolutionMinutes,
+      longestMinutes: s.longestMinutes,
+      bySeverity: s.bySeverity,
       lastIncidentAt: own[0]?.openedAt.toISOString() ?? null,
     };
   });
@@ -271,13 +277,13 @@ export async function getIncidentDetail(
       `SELECT COALESCE(e.http_method, '') AS method, ${ENDPOINT_GROUP_SQL} AS path,
               COUNT(*)::text AS failures, COUNT(DISTINCT ${USER_SQL})::text AS users,
               (ARRAY_AGG(e.status_code ORDER BY e.occurred_at DESC))[1] AS last_status
-       FROM api_events e WHERE ${window}
+       FROM api_events_real e WHERE ${window}
        GROUP BY 1, 2 ORDER BY COUNT(*) DESC LIMIT 10`,
       params
     ),
     pool.query<{ user_key: string; email: string | null; failures: string }>(
       `SELECT ${USER_SQL} AS user_key, MAX(NULLIF(TRIM(e.user_email), '')) AS email, COUNT(*)::text AS failures
-       FROM api_events e WHERE ${window}
+       FROM api_events_real e WHERE ${window}
        GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 50`,
       params
     ),
@@ -387,13 +393,13 @@ export async function getPaymentsReport(pool: Pool, projectId: string, range: Da
                   COUNT(DISTINCT ${USER_SQL})::text AS agents,
                   COUNT(DISTINCT ${USER_SQL}) FILTER (WHERE NOT ${OK_SQL})::text AS affected,
                   percentile_cont(0.95) WITHIN GROUP (ORDER BY e.latency_ms)::text AS p95
-           FROM api_events e WHERE ${scope}`,
+           FROM api_events_real e WHERE ${scope}`,
           params
         ),
         pool.query<{ bucket: string; calls: string; ok: string }>(
           `SELECT to_char(date_trunc('${granularity}', e.occurred_at AT TIME ZONE 'Africa/Kigali'), '${bucketFmt}') AS bucket,
                   COUNT(*)::text AS calls, COUNT(*) FILTER (WHERE ${OK_SQL})::text AS ok
-           FROM api_events e WHERE ${scope} GROUP BY 1 ORDER BY 1`,
+           FROM api_events_real e WHERE ${scope} GROUP BY 1 ORDER BY 1`,
           params
         ),
         pool.query<{ method: string; path: string; calls: string; failures: string; agents: string; affected: string; top_status: number | null; p95: string | null }>(
@@ -403,14 +409,14 @@ export async function getPaymentsReport(pool: Pool, projectId: string, range: Da
                   COUNT(DISTINCT ${USER_SQL}) FILTER (WHERE NOT ${OK_SQL})::text AS affected,
                   MODE() WITHIN GROUP (ORDER BY e.status_code) FILTER (WHERE NOT ${OK_SQL}) AS top_status,
                   percentile_cont(0.95) WITHIN GROUP (ORDER BY e.latency_ms)::text AS p95
-           FROM api_events e WHERE ${scope}
+           FROM api_events_real e WHERE ${scope}
            GROUP BY 1, 2
            ORDER BY COUNT(*) FILTER (WHERE NOT ${OK_SQL}) DESC, COUNT(*) DESC LIMIT 40`,
           params
         ),
         pool.query<{ status: number | null; n: string; agents: string }>(
           `SELECT NULLIF(e.status_code, 0) AS status, COUNT(*)::text AS n, COUNT(DISTINCT ${USER_SQL})::text AS agents
-           FROM api_events e WHERE ${scope} AND NOT ${OK_SQL}
+           FROM api_events_real e WHERE ${scope} AND NOT ${OK_SQL}
            GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 10`,
           params
         ),
@@ -423,10 +429,10 @@ export async function getPaymentsReport(pool: Pool, projectId: string, range: Da
           ? getErrorRateLast5Minutes(pool, u.slug as ServiceName)
           : Promise.resolve(0),
         pool.query<{ n: string }>(
-          `SELECT COUNT(*)::text AS n FROM api_events WHERE service = $1 AND occurred_at >= now() - interval '5 minutes'`,
+          `SELECT COUNT(*)::text AS n FROM api_events_real WHERE service = $1 AND occurred_at >= now() - interval '5 minutes'`,
           [u.slug]
         ),
-        pool.query<{ at: Date | null }>(`SELECT MAX(occurred_at) AS at FROM api_events WHERE service = $1`, [u.slug]),
+        pool.query<{ at: Date | null }>(`SELECT MAX(occurred_at) AS at FROM api_events_real WHERE service = $1`, [u.slug]),
       ]);
       const t = totals.rows[0]!;
       const calls = Number(t.calls);
@@ -487,7 +493,7 @@ export async function getPaymentsReport(pool: Pool, projectId: string, range: Da
       : Number(
           (
             await pool.query<{ n: string }>(
-              `SELECT COUNT(DISTINCT ${USER_SQL})::text AS n FROM api_events e
+              `SELECT COUNT(DISTINCT ${USER_SQL})::text AS n FROM api_events_real e
                WHERE e.service = ANY($1) AND e.occurred_at >= $2 AND e.occurred_at <= $3
                  AND (e.project_id = $4 OR e.project_id IS NULL) AND NOT ${OK_SQL}`,
               [upstreams.map((u) => u.slug), range.from, range.to, projectId]
@@ -596,18 +602,18 @@ export async function getPaymentEndpointDetail(
       `SELECT COUNT(*)::text AS calls, COUNT(*) FILTER (WHERE ${OK_SQL})::text AS ok,
               COUNT(DISTINCT ${USER_SQL})::text AS agents,
               COUNT(DISTINCT ${USER_SQL}) FILTER (WHERE NOT ${OK_SQL})::text AS affected
-       FROM api_events e WHERE ${where}`,
+       FROM api_events_real e WHERE ${where}`,
       params
     ),
     pool.query<{ status: number | null; n: string; agents: string }>(
       `SELECT NULLIF(e.status_code, 0) AS status, COUNT(*)::text AS n, COUNT(DISTINCT ${USER_SQL})::text AS agents
-       FROM api_events e WHERE ${where} AND NOT ${OK_SQL} GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 10`,
+       FROM api_events_real e WHERE ${where} AND NOT ${OK_SQL} GROUP BY 1 ORDER BY COUNT(*) DESC LIMIT 10`,
       params
     ),
     pool.query<{ bucket: string; calls: string; ok: string }>(
       `SELECT to_char(date_trunc('${granularity}', e.occurred_at AT TIME ZONE 'Africa/Kigali'), '${bucketFmt}') AS bucket,
               COUNT(*)::text AS calls, COUNT(*) FILTER (WHERE ${OK_SQL})::text AS ok
-       FROM api_events e WHERE ${where} GROUP BY 1 ORDER BY 1`,
+       FROM api_events_real e WHERE ${where} GROUP BY 1 ORDER BY 1`,
       params
     ),
     pool.query<{
@@ -634,7 +640,7 @@ export async function getPaymentEndpointDetail(
                 MIN(e.occurred_at) FILTER (WHERE NOT ${OK_SQL}) AS first_fail,
                 MAX(e.occurred_at) FILTER (WHERE NOT ${OK_SQL}) AS last_fail,
                 MAX(e.occurred_at) FILTER (WHERE ${OK_SQL}) AS last_ok
-         FROM api_events e WHERE ${where} ${searchCond}
+         FROM api_events_real e WHERE ${where} ${searchCond}
          GROUP BY 1
          HAVING COUNT(*) FILTER (WHERE NOT ${OK_SQL} ${statusCond}) > 0
        )
@@ -644,7 +650,7 @@ export async function getPaymentEndpointDetail(
               us.platform, us.app_version
        FROM per
        LEFT JOIN LATERAL (
-         SELECT e.* FROM api_events e
+         SELECT e.* FROM api_events_real e
          WHERE ${where} AND ${USER_SQL} = per.user_key AND NOT ${OK_SQL} ${statusCond}
          ORDER BY e.occurred_at DESC LIMIT 1
        ) lf ON true

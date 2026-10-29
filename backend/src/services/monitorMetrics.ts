@@ -42,13 +42,13 @@ export async function getProjectOverview(
          WHERE project_id = $1 AND ended_at >= now() - $2::interval) AS sessions,
        (SELECT COUNT(DISTINCT user_id)::text FROM user_sessions
          WHERE project_id = $1 AND ended_at >= now() - $2::interval AND user_id IS NOT NULL) AS users,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= now() - $2::interval) AS api,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= now() - $2::interval AND outcome = 'SUCCESS') AS success,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= now() - $2::interval AND outcome = 'FAILURE') AS failure,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= now() - $2::interval AND outcome = 'OTHER') AS other`,
     [projectId, interval]
   );
@@ -70,7 +70,7 @@ export async function getProjectOverview(
             COUNT(*)::text AS total,
             COUNT(*) FILTER (WHERE outcome IN ('FAILURE', 'OTHER'))::text AS failures,
             AVG(latency_ms)::text AS avg_latency
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= now() - $2::interval
      GROUP BY service, host
      ORDER BY COUNT(*) DESC`,
@@ -150,7 +150,7 @@ export async function getProjectApiStats(pool: Pool, projectId: string, days = 7
             COUNT(*) FILTER (WHERE outcome = 'FAILURE')::text AS failure,
             COUNT(*) FILTER (WHERE outcome = 'OTHER')::text AS other,
             AVG(latency_ms)::text AS avg_latency
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= now() - $2::interval
      GROUP BY service, host
      ORDER BY COUNT(*) DESC`,
@@ -185,7 +185,7 @@ export async function listOrgUsage(pool: Pool) {
             COUNT(e.id)::text AS events
      FROM organizations o
      LEFT JOIN projects p ON p.organization_id = o.id
-     LEFT JOIN api_events e ON e.project_id = p.id
+     LEFT JOIN api_events_real e ON e.project_id = p.id
        AND e.occurred_at >= now() - interval '7 days'
      GROUP BY o.id, o.name, o.slug, o.suspended_at
      ORDER BY o.name`

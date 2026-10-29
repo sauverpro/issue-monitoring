@@ -5,7 +5,7 @@
  * `onNewPage`) whenever the next element wouldn't fit — including mid-paragraph and
  * mid-table continuation (a table's header row is redrawn on the page it continues onto).
  */
-import { SimplePdf, wrapText, type PdfColor } from "./simplePdf.js";
+import { SimplePdf, measureText, wrapText, type PdfColor } from "./simplePdf.js";
 
 export type FlowTheme = {
   ink: PdfColor;
@@ -15,6 +15,10 @@ export type FlowTheme = {
   tableHeaderBg: PdfColor;
   tableHeaderText: PdfColor;
   stripe: PdfColor;
+  /** Corner radius for table headers and callouts (0 = square). */
+  radius?: number;
+  /** Letter-spacing for table header labels; when set, labels are upper-cased (small-caps look). */
+  headerTracking?: number;
 };
 
 export type TableCol = { label: string; width: number; align?: "left" | "right" };
@@ -26,6 +30,12 @@ export type TableOpts = {
   gapAfter?: number;
   /** Wrap each cell onto multiple lines (row height grows to fit) instead of truncating to one line. */
   wrap?: boolean;
+  /** Optional small muted second line under a cell (e.g. a raw API path under a friendly name). */
+  subline?: (rowIndex: number, colIndex: number) => string | undefined;
+  /** Font size for body cells (default 8.5). */
+  cellSize?: number;
+  /** Render a cell as a rounded pill badge (e.g. a status) instead of plain text. */
+  badge?: (row: string[], colIndex: number, rowIndex: number) => { bg: PdfColor; color: PdfColor } | undefined;
 };
 
 export type CalloutScheme = { bg: PdfColor; accent: PdfColor; titleColor?: PdfColor };
@@ -116,41 +126,47 @@ export class FlowDoc {
     const headerH = 22;
     const w = this.contentWidth;
     const wrap = opts.wrap ?? false;
-    const cellSize = 8.5;
-    const lineH = 11;
+    const cellSize = opts.cellSize ?? 8.5;
+    const lineH = Math.round(cellSize * 1.3);
+    const SUB_H = 10;
+    const hasSub = (ri: number) => ri < rows.length && cols.some((_, ci) => Boolean(opts.subline?.(ri, ci)));
 
     const drawHeader = () => {
       this.pdf.fill(this.theme.tableHeaderBg);
-      this.pdf.rect(this.marginX, this.y, w, headerH, "f");
+      this.pdf.roundRect(this.marginX, this.y, w, headerH, this.theme.radius ?? 0, "f", "top");
+      const tracking = this.theme.headerTracking;
       let cx = this.marginX;
       for (const col of cols) {
-        this.pdf.text(col.label, col.align === "right" ? cx + col.width - 8 : cx + 8, this.y + 6, {
-          size: 8,
+        this.pdf.text(tracking ? col.label.toUpperCase() : col.label, col.align === "right" ? cx + col.width - 8 : cx + 8, this.y + (tracking ? 7.5 : 6), {
+          size: tracking ? 7 : 8,
           bold: true,
           color: this.theme.tableHeaderText,
           align: col.align === "right" ? "right" : "left",
           maxWidth: col.width - 12,
+          tracking,
         });
         cx += col.width;
       }
       this.y += headerH;
     };
 
-    const rowHeight = (row: string[]): number => {
-      if (!wrap) return 20;
+    const rowLines = (row: string[]): number => {
+      if (!wrap) return 1;
       let maxLines = 1;
       cols.forEach((col, ci) => {
         const lines = wrapText(row[ci] ?? "", col.width - 12, cellSize);
         maxLines = Math.max(maxLines, lines.length || 1);
       });
-      return maxLines * lineH + 9;
+      return maxLines;
     };
+    const rowHeight = (row: string[], ri: number): number =>
+      (wrap ? rowLines(row) * lineH + 9 : Math.max(20, lineH + 9)) + (hasSub(ri) ? SUB_H : 0);
 
-    this.ensureSpace(headerH + rowHeight(rows[0] ?? []));
+    this.ensureSpace(headerH + rowHeight(rows[0] ?? [], 0));
     drawHeader();
 
     rows.forEach((row, ri) => {
-      const rh = rowHeight(row);
+      const rh = rowHeight(row, ri);
       if (this.y + rh > this.contentBottom) {
         this.newPage();
         drawHeader();
@@ -169,7 +185,17 @@ export class FlowDoc {
         const color = opts.textColor?.(row, ci, ri) ?? this.theme.ink;
         const bold = opts.boldCell?.(row, ci, ri) ?? false;
         const tx = col.align === "right" ? cx + col.width - 8 : cx + 8;
-        if (wrap) {
+        const badge = row[ci] ? opts.badge?.(row, ci, ri) : undefined;
+        if (badge) {
+          const label = row[ci]!;
+          const bw = Math.min(col.width - 10, measureText(label, 7, true) * 1.18 + 14);
+          const bx = col.align === "right" ? cx + col.width - 6 - bw : cx + 6;
+          // Line up with the first text line in wrapped rows; centre otherwise.
+          const by = wrap ? this.y + 2.5 : this.y + Math.max(2, (rh - (hasSub(ri) ? SUB_H : 0) - 14) / 2);
+          this.pdf.fill(badge.bg);
+          this.pdf.roundRect(bx, by, bw, 14, 7, "f");
+          this.pdf.text(label, bx + bw / 2, by + 3.6, { size: 7, bold: true, color: badge.color, align: "center", maxWidth: bw - 6 });
+        } else if (wrap) {
           const lines = wrapText(row[ci] ?? "", col.width - 12, cellSize, bold);
           lines.forEach((line, li) => {
             this.pdf.text(line, tx, this.y + 5 + li * lineH, {
@@ -184,6 +210,16 @@ export class FlowDoc {
             size: cellSize,
             bold,
             color,
+            align: col.align === "right" ? "right" : "left",
+            maxWidth: col.width - 12,
+          });
+        }
+        const sub = opts.subline?.(ri, ci);
+        if (sub) {
+          const linesUsed = wrap ? wrapText(row[ci] ?? "", col.width - 12, cellSize, bold).length || 1 : 1;
+          this.pdf.text(sub, tx, this.y + 6 + linesUsed * lineH, {
+            size: 7,
+            color: this.theme.muted,
             align: col.align === "right" ? "right" : "left",
             maxWidth: col.width - 12,
           });
@@ -203,10 +239,18 @@ export class FlowDoc {
     const lines = wrapText(text, w - 28, 9);
     const h = 30 + lines.length * 13 + 10;
     this.ensureSpace(h + 12);
+    const r = this.theme.radius ?? 0;
     this.pdf.fill(scheme.bg);
-    this.pdf.rect(this.marginX, this.y, w, h, "f");
+    this.pdf.roundRect(this.marginX, this.y, w, h, r, "f");
     this.pdf.fill(scheme.accent);
-    this.pdf.rect(this.marginX, this.y, 4, h, "f");
+    if (r > 4) {
+      // Rounded left edge, then cover all but a 4pt strip with the background.
+      this.pdf.roundRect(this.marginX, this.y, r * 2, h, r, "f", "left");
+      this.pdf.fill(scheme.bg);
+      this.pdf.rect(this.marginX + 4, this.y, r * 2 - 3, h, "f");
+    } else {
+      this.pdf.rect(this.marginX, this.y, 4, h, "f");
+    }
     this.pdf.text(title, this.marginX + 16, this.y + 14, { size: 9.5, bold: true, color: scheme.titleColor ?? scheme.accent });
     let ly = this.y + 30;
     for (const line of lines) {
