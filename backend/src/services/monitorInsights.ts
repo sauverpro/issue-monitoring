@@ -1,3 +1,4 @@
+import { getReliabilityTargets, verdict } from "./reliabilityTargets.js";
 import type { Pool } from "pg";
 import type { DateRange } from "./monitorJourney.js";
 import { getReportFunnels, previousRange, pctDelta } from "./monitorReports.js";
@@ -268,7 +269,7 @@ async function loadFailureGroups(pool: Pool, projectId: string, range: DateRange
             MIN(occurred_at) AS first_seen,
             MAX(occurred_at) AS last_seen,
             AVG(latency_ms)::text AS avg_latency
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1
        AND occurred_at >= $2 AND occurred_at <= $3
        AND (${resultClass}) IN ('client_failure', 'server_error', 'network')
@@ -282,7 +283,7 @@ async function loadFailureGroups(pool: Pool, projectId: string, range: DateRange
     `SELECT COALESCE(http_method, 'GET') AS method,
             ${EVENT_PATH_SQL} AS path,
             COUNT(*)::text AS total
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
      GROUP BY 1, 2`,
     [projectId, range.from, range.to]
@@ -385,7 +386,7 @@ async function problemSummaryStats(pool: Pool, projectId: string, range: DateRan
        COUNT(*) FILTER (WHERE (${resultClass}) = 'client_failure')::text AS client_failure,
        COUNT(*) FILTER (WHERE (${resultClass}) = 'server_error')::text AS server_error,
        COUNT(*) FILTER (WHERE (${resultClass}) = 'network')::text AS network
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3`,
     [projectId, range.from, range.to]
   );
@@ -414,7 +415,7 @@ async function loadSlowEndpoints(pool: Pool, projectId: string, range: DateRange
             AVG(latency_ms)::text AS avg_latency,
             percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::text AS p95,
             MAX(occurred_at) AS last_seen
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1
        AND occurred_at >= $2 AND occurred_at <= $3
        AND latency_ms IS NOT NULL
@@ -471,7 +472,7 @@ export async function getProblemDetail(
             percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::text AS p95,
             percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms)::text AS p99,
             MIN(failure_reason) AS failure_reason
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        AND (${resultClass}) IN ('client_failure','server_error','network')
        AND COALESCE(http_method, 'GET') = $4
@@ -492,7 +493,7 @@ export async function getProblemDetail(
             percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms)::text AS p50,
             percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::text AS p95,
             percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms)::text AS p99
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        AND COALESCE(http_method, 'GET') = $4
        AND ${EVENT_PATH_SQL} = $5`,
@@ -501,7 +502,7 @@ export async function getProblemDetail(
 
   const trend = await pool.query<{ date: string; n: string }>(
     `SELECT (occurred_at AT TIME ZONE 'UTC')::date::text AS date, COUNT(*)::text AS n
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        AND (${resultClass}) IN ('client_failure','server_error','network')
        AND COALESCE(http_method, 'GET') = $4
@@ -595,7 +596,7 @@ export async function getProblemAffectedUsers(
             MAX(occurred_at) AS last_seen,
             (ARRAY_AGG(session_id ORDER BY occurred_at DESC)
               FILTER (WHERE session_id IS NOT NULL AND TRIM(session_id) <> ''))[1] AS sample_session_id
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        AND (${resultClass}) IN ('client_failure','server_error','network')
        AND COALESCE(http_method, 'GET') = $4
@@ -635,7 +636,7 @@ export async function getApiStatusExplorer(pool: Pool, projectId: string, range:
       `SELECT ${resultClass} AS cls,
               COUNT(*)::text AS n,
               ${IDENTIFIED_USERS_SQL}::text AS users
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        GROUP BY 1`,
       [projectId, range.from, range.to]
@@ -644,7 +645,7 @@ export async function getApiStatusExplorer(pool: Pool, projectId: string, range:
       `SELECT ${serviceSql} AS service,
               COUNT(*)::text AS n,
               ${IDENTIFIED_USERS_SQL}::text AS users
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        GROUP BY 1
        ORDER BY COUNT(*) DESC`,
@@ -655,7 +656,7 @@ export async function getApiStatusExplorer(pool: Pool, projectId: string, range:
               ${resultClass} AS cls,
               COUNT(*)::text AS n,
               ${IDENTIFIED_USERS_SQL}::text AS users
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        GROUP BY 1, 2`,
       [projectId, range.from, range.to]
@@ -664,7 +665,7 @@ export async function getApiStatusExplorer(pool: Pool, projectId: string, range:
       `SELECT ${serviceSql} AS service,
               COUNT(*)::text AS n,
               ${IDENTIFIED_USERS_SQL}::text AS users
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
          AND COALESCE(status_code, 0) = 0
          AND (${resultClass}) IN ('client_failure', 'server_error', 'network')
@@ -695,7 +696,7 @@ export async function getApiStatusExplorer(pool: Pool, projectId: string, range:
               MIN(occurred_at) AS first_seen,
               MAX(occurred_at) AS last_seen,
               AVG(latency_ms)::text AS avg_latency
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        GROUP BY COALESCE(http_method, 'GET'), ${EVENT_PATH_SQL}, status_code, ${resultClass}, ${serviceSql}
        ORDER BY COUNT(*) DESC
@@ -705,7 +706,7 @@ export async function getApiStatusExplorer(pool: Pool, projectId: string, range:
     pool.query<{ n: string; users: string }>(
       `SELECT COUNT(*)::text AS n,
               ${IDENTIFIED_USERS_SQL}::text AS users
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
          AND COALESCE(status_code, 0) = 0
          AND (${resultClass}) IN ('client_failure', 'server_error', 'network')`,
@@ -746,7 +747,7 @@ export async function getApiStatusExplorer(pool: Pool, projectId: string, range:
                                ${resultClass}, ${serviceSql}
                   ORDER BY COUNT(*) DESC, MAX(occurred_at) DESC
                 )::text AS rn
-         FROM api_events
+         FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
            AND ${USER_KEY_SQL} IS NOT NULL
          GROUP BY COALESCE(http_method, 'GET'), ${EVENT_PATH_SQL}, status_code, ${resultClass},
@@ -862,7 +863,7 @@ export async function getApiStatusExplorer(pool: Pool, projectId: string, range:
     `SELECT COALESCE(http_method, 'GET') AS method,
             ${EVENT_PATH_SQL} AS path,
             COUNT(*)::text AS total
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
      GROUP BY 1, 2`,
     [projectId, range.from, range.to]
@@ -1085,7 +1086,7 @@ export async function getApiStatusAffectedUsers(
             (ARRAY_AGG(session_id ORDER BY occurred_at DESC)
               FILTER (WHERE session_id IS NOT NULL AND TRIM(session_id) <> ''))[1] AS sample_session_id,
             (ARRAY_AGG(COALESCE(http_method,'GET') || ' ' || ${EVENT_PATH_SQL} ORDER BY occurred_at DESC))[1] AS top_endpoint
-     FROM api_events
+     FROM api_events_real
      WHERE ${clauses.join(" AND ")}
      GROUP BY ${USER_KEY_SQL}
      ORDER BY COUNT(*) DESC, MAX(occurred_at) DESC
@@ -1137,12 +1138,12 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
          WHERE project_id = $1 AND ended_at >= $2 AND started_at <= $3) AS sessions,
        (SELECT COUNT(*)::text FROM session_actions
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3) AS actions,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3) AS apis,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
            AND (${infraFailSql})) AS errors,
-       (SELECT AVG(latency_ms)::text FROM api_events
+       (SELECT AVG(latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
            AND latency_ms IS NOT NULL) AS avg_latency,
        (SELECT COUNT(DISTINCT ${USER_KEY_SQL})::text FROM user_sessions
@@ -1152,12 +1153,12 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
          WHERE project_id = $1 AND ended_at >= $4 AND started_at <= $5) AS prev_sessions,
        (SELECT COUNT(*)::text FROM session_actions
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5) AS prev_actions,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5) AS prev_apis,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5
            AND (${infraFailSql})) AS prev_errors,
-       (SELECT AVG(latency_ms)::text FROM api_events
+       (SELECT AVG(latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5
            AND latency_ms IS NOT NULL) AS prev_latency`,
     [projectId, range.from, range.to, prev.from, prev.to]
@@ -1210,7 +1211,7 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
     getReportFunnels(pool, projectId, range),
     pool.query<{ cls: string; n: string }>(
       `SELECT ${resultClass} AS cls, COUNT(*)::text AS n
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        GROUP BY 1`,
       [projectId, range.from, range.to]
@@ -1225,7 +1226,7 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
               (regexp_match(COALESCE(request_url, ''), 'https?://([^/]+)'))[1] AS host,
               ${resultClass} AS cls,
               COUNT(*)::text AS n
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        GROUP BY service, host, 3`,
       [projectId, range.from, range.to]
@@ -1242,7 +1243,7 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
               ${resultClass} AS cls,
               COUNT(*)::text AS n,
               MAX(occurred_at) AS last_seen
-       FROM api_events
+       FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
        GROUP BY 1, 2, 3
        ORDER BY COUNT(*) DESC
@@ -1364,15 +1365,14 @@ export async function getProjectDashboard(pool: Pool, projectId: string, range: 
     funnels.transitions.filter((t) => !/^\(?\s*unknown\s*\)?$/i.test(t.to))
   );
 
-  const healthStatus =
-    availability >= 0.995 && errorRate <= 0.01
-      ? "healthy"
-      : availability >= 0.97 && errorRate <= 0.05
-        ? "degraded"
-        : "critical";
+  // Judged against the project's stage targets (pilot by default), not a fixed bar.
+  const targets = await getReliabilityTargets(pool, projectId);
+  const targetVerdict = verdict(availability, targets.overall);
+  const healthStatus = targetVerdict === "on" ? "healthy" : targetVerdict === "near" ? "degraded" : "critical";
 
   return {
     hasEvents: sessions > 0 || apis > 0,
+    targets: { phase: targets.phase, overall: targets.overall, longTerm: targets.longTerm },
     health: {
       status: healthStatus,
       availability,
@@ -1418,17 +1418,17 @@ export async function getProjectPerformance(pool: Pool, projectId: string, range
     prev_p99: string | null;
   }>(
     `SELECT
-       (SELECT AVG(latency_ms)::text FROM api_events
+       (SELECT AVG(latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3 AND latency_ms IS NOT NULL) AS avg,
-       (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::text FROM api_events
+       (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3 AND latency_ms IS NOT NULL) AS p95,
-       (SELECT percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms)::text FROM api_events
+       (SELECT percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3 AND latency_ms IS NOT NULL) AS p99,
-       (SELECT AVG(latency_ms)::text FROM api_events
+       (SELECT AVG(latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5 AND latency_ms IS NOT NULL) AS prev_avg,
-       (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::text FROM api_events
+       (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5 AND latency_ms IS NOT NULL) AS prev_p95,
-       (SELECT percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms)::text FROM api_events
+       (SELECT percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5 AND latency_ms IS NOT NULL) AS prev_p99`,
     [projectId, range.from, range.to, prev.from, prev.to]
   );
@@ -1452,7 +1452,7 @@ export async function getProjectPerformance(pool: Pool, projectId: string, range
             percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::text AS p95,
             percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms)::text AS p99,
             MAX(latency_ms)::text AS max_latency
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3 AND latency_ms IS NOT NULL
      GROUP BY 1, 2
      ORDER BY AVG(latency_ms) DESC NULLS LAST
@@ -1472,7 +1472,7 @@ export async function getProjectPerformance(pool: Pool, projectId: string, range
   const slowApis = rows.filter((r) => r.avgLatencyMs >= 500).length;
   const prevSlow = await pool.query<{ n: string }>(
     `SELECT COUNT(*)::text AS n FROM (
-       SELECT 1 FROM api_events
+       SELECT 1 FROM api_events_real
        WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3 AND latency_ms IS NOT NULL
        GROUP BY COALESCE(http_method, 'GET'), ${EVENT_PATH_SQL}
        HAVING AVG(latency_ms) >= 500
@@ -1483,14 +1483,14 @@ export async function getProjectPerformance(pool: Pool, projectId: string, range
   const seriesQ = hourly
     ? await pool.query<{ label: string; avg: string | null }>(
         `SELECT EXTRACT(HOUR FROM occurred_at)::int::text AS label, AVG(latency_ms)::text AS avg
-         FROM api_events
+         FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3 AND latency_ms IS NOT NULL
          GROUP BY 1`,
         [projectId, range.from, range.to]
       )
     : await pool.query<{ label: string; avg: string | null }>(
         `SELECT (occurred_at AT TIME ZONE 'UTC')::date::text AS label, AVG(latency_ms)::text AS avg
-         FROM api_events
+         FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3 AND latency_ms IS NOT NULL
          GROUP BY 1
          ORDER BY 1`,

@@ -87,7 +87,7 @@ const API_SELECT = `
          NULLIF(TRIM(e.user_email), '') AS email, NULLIF(TRIM(e.user_id), '') AS user_id,
          e.service, e.http_method AS method, e.endpoint, e.status_code, e.latency_ms, e.outcome,
          e.current_screen, e.occurred_at, us.platform, us.app_version
-  FROM api_events e
+  FROM api_events_real e
   LEFT JOIN user_sessions us ON us.session_id = e.session_id`;
 
 const ACT_SELECT = `
@@ -218,7 +218,7 @@ export async function eventDetail(pool: Pool, projectId: string, eventId: string
     error_code: string | null;
     upstream_key: string | null;
   }>(
-    `${API_SELECT.replace("e.current_screen,", "e.current_screen, e.request_url, e.request_body, e.response_body, e.failure_reason, e.error_code, e.upstream_key,")}
+    `${API_SELECT.replace("FROM api_events_real e", "FROM api_events e").replace("e.current_screen,", "e.current_screen, e.request_url, e.request_body, e.response_body, e.failure_reason, e.error_code, e.upstream_key,")}
      WHERE e.project_id = $1 AND ${idMatch("e", 2)} LIMIT 1`,
     [projectId, ...idParam(eventId, "api")]
   );

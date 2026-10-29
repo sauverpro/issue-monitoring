@@ -13,6 +13,8 @@ import { persistSessionActions } from "./sessionActions.js";
 import { listProjectUpstreams } from "./tenancy.js";
 import { publishLiveEvent } from "../sse/liveHub.js";
 import { classifyHttpResult } from "./httpResultClass.js";
+
+const TEST_TRAFFIC = /(mock|sandbox|staging)/i;
 import type { ResolvedProjectKey } from "./apiKeys.js";
 
 export type IngestResult = {
@@ -210,7 +212,8 @@ export async function ingestMonitorEnvelope(
       try {
         await persistAndProcessEvent(pool, payload);
         accepted += 1;
-        publishLiveEvent(project.projectId, {
+        // Test traffic (mock / sandbox endpoints) is stored but kept out of live stats.
+        if (!TEST_TRAFFIC.test(ev.request_url)) publishLiveEvent(project.projectId, {
           id: eventId,
           kind: "api",
           at: ev.occurred_at,

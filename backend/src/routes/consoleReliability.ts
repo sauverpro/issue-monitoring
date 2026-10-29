@@ -13,6 +13,7 @@ import {
   projectServices,
 } from "../services/reliability.js";
 import { listProjectUpstreams } from "../services/tenancy.js";
+import { getReliabilityTargets, setReliabilityTargets, targetsSchema } from "../services/reliabilityTargets.js";
 import { broadcastSse } from "../sse/hub.js";
 import { incidentLink, notifySlack } from "../services/notifications/slack.js";
 import { emailIncidentAlert } from "../services/notifications/incidentEmail.js";
@@ -116,6 +117,21 @@ export function consoleReliabilityRouter(pool: Pool): IRouter {
 
   r.get(`${base}/payments`, requireProject(pool, "viewer"), async (req, res) => {
     res.json(await getPaymentsReport(pool, req.params.projectId!, reportQueryRange(req.query)));
+  });
+
+  /** Stage-appropriate reliability targets (pilot by default) used by the Overview and reports. */
+  r.get(`${base}/targets`, requireProject(pool, "viewer"), async (req, res) => {
+    res.json(await getReliabilityTargets(pool, req.params.projectId!));
+  });
+
+  r.put(`${base}/targets`, requireProject(pool, "admin"), async (req, res) => {
+    const parsed = targetsSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Targets must be fractions between 0.5 and 1" });
+      return;
+    }
+    await setReliabilityTargets(pool, req.params.projectId!, parsed.data);
+    res.json(parsed.data);
   });
 
   /** One payment endpoint (or whole channel): status breakdown, trend and affected agents. */
