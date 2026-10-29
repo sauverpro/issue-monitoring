@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { apiFetch } from "@/org/lib/api";
 import { PageHeader, Panel } from "@/org/components/ui";
+import { ReliabilityTargetsForm } from "@/org/components/ReliabilityTargetsForm";
 
 type KeyRow = {
   id: string;
@@ -188,6 +189,8 @@ export function SettingsPage() {
           </ul>
         </Panel>
       </section>
+
+      {projectId && <ReliabilityTargetsForm projectId={projectId} services={upstreams.map((u) => u.slug)} />}
     </div>
   );
 }

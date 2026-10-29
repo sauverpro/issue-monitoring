@@ -91,12 +91,12 @@ export async function getReportOverview(pool: Pool, projectId: string, range: Da
          WHERE project_id = $1 AND ended_at >= $2 AND started_at <= $3) AS sessions,
        (SELECT COUNT(*)::text FROM session_actions
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3) AS actions,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3) AS apis,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
            AND outcome IN ('FAILURE','OTHER')) AS errors,
-       (SELECT AVG(latency_ms)::text FROM api_events
+       (SELECT AVG(latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
            AND latency_ms IS NOT NULL) AS avg_latency,
        (SELECT AVG(EXTRACT(EPOCH FROM (ended_at - started_at)))::text FROM user_sessions
@@ -108,12 +108,12 @@ export async function getReportOverview(pool: Pool, projectId: string, range: Da
          WHERE project_id = $1 AND ended_at >= $4 AND started_at <= $5) AS prev_sessions,
        (SELECT COUNT(*)::text FROM session_actions
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5) AS prev_actions,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5) AS prev_apis,
-       (SELECT COUNT(*)::text FROM api_events
+       (SELECT COUNT(*)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5
            AND outcome IN ('FAILURE','OTHER')) AS prev_errors,
-       (SELECT AVG(latency_ms)::text FROM api_events
+       (SELECT AVG(latency_ms)::text FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $4 AND occurred_at <= $5
            AND latency_ms IS NOT NULL) AS prev_latency,
        (SELECT AVG(EXTRACT(EPOCH FROM (ended_at - started_at)))::text FROM user_sessions
@@ -146,7 +146,7 @@ export async function getReportOverview(pool: Pool, projectId: string, range: Da
                 COUNT(*)::text AS apis,
                 COUNT(*) FILTER (WHERE outcome IN ('FAILURE','OTHER'))::text AS errors,
                 AVG(latency_ms)::text AS latency
-         FROM api_events
+         FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
          GROUP BY 1`,
         [projectId, range.from, range.to]
@@ -180,7 +180,7 @@ export async function getReportOverview(pool: Pool, projectId: string, range: Da
                 COUNT(*)::text AS total,
                 COUNT(*) FILTER (WHERE outcome IN ('FAILURE','OTHER'))::text AS failure,
                 AVG(latency_ms)::text AS avg_latency
-         FROM api_events
+         FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
          GROUP BY 1, 2, 3
          ORDER BY COUNT(*) DESC
@@ -196,7 +196,7 @@ export async function getReportOverview(pool: Pool, projectId: string, range: Da
                   ELSE 'other'
                 END AS bucket,
                 COUNT(*)::text AS n
-         FROM api_events
+         FROM api_events_real
          WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
            AND outcome IN ('FAILURE','OTHER')
          GROUP BY 1

@@ -1,5 +1,6 @@
 import type { Pool } from "pg";
 import type { DateRange } from "./monitorJourney.js";
+import { getReportQuality, type FailureCause, type ReportQuality } from "./reportQuality.js";
 import {
   buildRecommendations,
   getFunnelReport,
@@ -50,6 +51,22 @@ const ERROR_LABEL: Record<string, string> = {
   other: "Other",
 };
 
+const CAUSE_BAR_LABEL: Record<FailureCause, string> = {
+  auth: "Auth / session (401/403, login)",
+  client: "Client / validation (4xx)",
+  server: "Server failure (5xx)",
+  network: "No response (network)",
+  unclassified: "No HTTP status",
+};
+
+const CAUSE_BAR_COLOR: Record<FailureCause, PdfColor> = {
+  auth: hexColor("#f97316"),
+  client: hexColor("#eab308"),
+  server: C.red,
+  network: C.sky,
+  unclassified: C.muted,
+};
+
 const ERROR_COLOR: Record<string, PdfColor> = {
   "5xx": C.red,
   "4xx": hexColor("#f97316"),
@@ -87,7 +104,7 @@ export async function exportReportPdf(
   range: DateRange,
   sections: Set<string> = ALL_SECTIONS
 ): Promise<{ filename: string; buffer: Buffer }> {
-  const [overview, funnels, retention, dashboard, problems, performance, behavior] = await Promise.all([
+  const [overview, funnels, retention, dashboard, problems, performance, behavior, quality] = await Promise.all([
     getReportOverview(pool, projectId, range),
     getFunnelReport(pool, projectId, range),
     getReportRetention(pool, projectId, range),
@@ -95,6 +112,7 @@ export async function exportReportPdf(
     getProjectProblems(pool, projectId, range),
     getProjectPerformance(pool, projectId, range),
     getReportBehavior(pool, projectId, range),
+    sections.has("errors") ? getReportQuality(pool, projectId, range) : Promise.resolve(undefined),
   ]);
   const recommendations = buildRecommendations({
     errors: problems.errors,
@@ -112,6 +130,7 @@ export async function exportReportPdf(
     behavior,
     recommendations,
     sections,
+    quality,
   });
   const stamp = range.from.toISOString().slice(0, 10);
   const slug =
@@ -134,6 +153,7 @@ export function renderMonitorReportPdf(input: {
   recommendations?: { priority: string; title: string; detail: string }[];
   sections?: Set<string>;
   generatedAt?: Date;
+  quality?: ReportQuality;
 }): Buffer {
   const generatedAt = input.generatedAt ?? new Date();
   const sections = input.sections ?? ALL_SECTIONS;
@@ -143,7 +163,7 @@ export function renderMonitorReportPdf(input: {
   if (sections.has("behavior")) doc.drawUserBehaviorPage(input.overview, input.behavior);
   if (sections.has("journeys")) doc.drawUserJourneyPage(input.funnels, input.retention);
   if (sections.has("health")) doc.drawSystemHealthPage(input.overview, input.dashboard);
-  if (sections.has("errors")) doc.drawProblemsPage(input.problems, input.overview, sections);
+  if (sections.has("errors")) doc.drawProblemsPage(input.problems, input.overview, sections, input.quality);
   if (sections.has("apis")) doc.drawPerformancePage(input.performance);
   if (sections.has("recommendations") && input.recommendations && input.recommendations.length > 0) {
     doc.drawRecommendations(input.recommendations);
@@ -528,12 +548,12 @@ class ReportLayout {
   // ------------------------------------------------------------------
   // Page 5 — Problems
   // ------------------------------------------------------------------
-  drawProblemsPage(problems: Problems | undefined, data: Overview, sections: Set<string>): void {
+  drawProblemsPage(problems: Problems | undefined, data: Overview, sections: Set<string>, quality?: ReportQuality): void {
     this.pdf.addPage();
     this.paintPage();
     this.drawMiniHeader("Problems");
     this.y = 52;
-    this.drawPageDescription("Error concentration helps prioritize the failures affecting the greatest number of users.");
+    this.drawPageDescription("Incomplete requests split by cause: client and login rejections are product issues, server failures and no-response are reliability issues.");
 
     if (!problems) {
       this.pdf.text("No problem data available for this range.", MARGIN, this.y + 20, { size: 9, color: C.muted });
@@ -541,9 +561,9 @@ class ReportLayout {
     }
 
     this.drawStatRow([
-      { label: "Total errors", value: fmt(problems.summary.totalErrors), delta: problems.summary.totalErrorsDelta, invert: true },
+      { label: "Incomplete requests", value: fmt(problems.summary.totalErrors), delta: problems.summary.totalErrorsDelta, invert: true },
       { label: "Users affected", value: fmt(problems.summary.usersAffected), delta: problems.summary.usersAffectedDelta, invert: true },
-      { label: "5xx errors", value: fmt(problems.summary.errors5xx), delta: problems.summary.errors5xxDelta, invert: true },
+      { label: "Server (5xx) failures", value: fmt(problems.summary.errors5xx), delta: problems.summary.errors5xxDelta, invert: true },
       { label: "Critical", value: fmt(problems.summary.critical) },
     ]);
 
@@ -552,18 +572,22 @@ class ReportLayout {
     const rowH = 110;
     this.panel(MARGIN, this.y, half, rowH, "Priority breakdown");
     this.drawPriorityBreakdown(MARGIN, this.y, half, rowH, problems.priority);
-    this.panel(MARGIN + half + 10, this.y, half, rowH, "Errors by type");
+    this.panel(MARGIN + half + 10, this.y, half, rowH, "Incomplete requests by cause");
     drawHBars(
       this.pdf,
       MARGIN + half + 10 + 14,
       this.y + 32,
       half - 28,
       rowH - 44,
-      data.errorsByType.map((s) => ({
-        label: ERROR_LABEL[s.type] ?? s.type,
-        value: s.count,
-        color: ERROR_COLOR[s.type] ?? C.red,
-      }))
+      quality
+        ? quality.causes
+            .filter((c) => c.count > 0)
+            .map((c) => ({ label: CAUSE_BAR_LABEL[c.cause], value: c.count, color: CAUSE_BAR_COLOR[c.cause] }))
+        : data.errorsByType.map((s) => ({
+            label: ERROR_LABEL[s.type] ?? s.type,
+            value: s.count,
+            color: ERROR_COLOR[s.type] ?? C.red,
+          }))
     );
     this.y += rowH + 12;
 
@@ -582,10 +606,14 @@ class ReportLayout {
     this.y += remain + 10;
 
     const top = problems.errors[0];
-    const insight = top
-      ? `${top.method} ${top.path} is the dominant problem this period, combining ${fmt(top.occurrences)} occurrences across ${fmt(top.usersAffected)} users and ${fmt(top.sessionsAffected)} sessions. It should be investigated before lower-volume issues.`
-      : "No errors were recorded in this range.";
-    this.drawInsight("INCIDENT INTERPRETATION", insight);
+    let insight = top
+      ? `${top.method} ${top.path} is the largest source of incomplete requests: ${fmt(top.occurrences)} occurrences across ${fmt(top.usersAffected)} users and ${fmt(top.sessionsAffected)} sessions.`
+      : "No incomplete requests were recorded in this range.";
+    if (quality && quality.incomplete > 0) {
+      const share = (c: string) => (quality.causes.find((x) => x.cause === c)?.count ?? 0) / quality.incomplete;
+      insight += ` Of all incomplete requests, ${((share("auth") + share("client")) * 100).toFixed(0)}% were client/login rejections and ${(share("server") * 100).toFixed(1)}% server (5xx) failures; service failure rate (5xx + no response) was ${(quality.serviceFailureRate * 100).toFixed(2)}%.`;
+    }
+    this.drawInsight("INTERPRETATION", insight);
   }
 
   // ------------------------------------------------------------------
@@ -820,7 +848,7 @@ class ReportLayout {
       { label: "Sessions", kpi: data.kpis.sessions, color: C.purple },
       { label: "Total actions", kpi: data.kpis.actions, color: C.green },
       { label: "API requests", kpi: data.kpis.apiRequests, color: C.sky },
-      { label: "Errors", kpi: data.kpis.errors, color: C.red, invert: true },
+      { label: "Incomplete req.", kpi: data.kpis.errors, color: C.red, invert: true },
       { label: "Avg. latency", kpi: data.kpis.avgLatencyMs, color: C.amber, invert: true, format: (n) => `${fmt(n)}ms` },
     ];
     const gap = 8;
@@ -975,7 +1003,7 @@ class ReportLayout {
       { label: "User", width: w - 190 },
       { label: "Sessions", width: 64 },
       { label: "Actions", width: 64 },
-      { label: "Errors", width: 62 },
+      { label: "Incompl.", width: 62 },
     ];
     const startY = y + 28;
     this.drawTableHeader(x, startY, cols.map((c, i) => ({ ...c, align: i === 0 ? "left" : "right" })));
@@ -1093,7 +1121,7 @@ class ReportLayout {
       { label: "Sessions", width: 90, align: "right" as const },
       { label: "Actions", width: 90, align: "right" as const },
       { label: "API", width: 90, align: "right" as const },
-      { label: "Errors", width: 80, align: "right" as const },
+      { label: "Incomplete", width: 80, align: "right" as const },
       { label: "Latency", width: 90, align: "right" as const },
       { label: "Duration", width: w - 90 - 80 - 90 - 90 - 90 - 80 - 90 - 24, align: "right" as const },
     ];
