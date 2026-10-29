@@ -4,15 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
-    "start": "node dist/index.js",
+    "dev": "node api.js && tsx watch src/index.ts",
+    "build": "node api.js && tsc -p tsconfig.build.json",
+    "start": "node api.js && node dist/index.js",
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed:dev": "tsx scripts/seed-dev-data.ts",
     "db:seed:production": "tsx scripts/seed-production.ts",
     "db:assign-marketplace": "tsx scripts/assign-marketplace.ts",
-    "test": "node --import tsx --test tests/sessionSummary.test.ts tests/slidingWindow.test.ts tests/incidents.test.ts tests/uptime.test.ts tests/syntheticPing.test.ts tests/sentryServiceMap.test.ts tests/sentrySpans.test.ts tests/sentryErrors.test.ts tests/monitorTenancy.test.ts tests/redactBodies.test.ts tests/monitorJourney.test.ts tests/monitorReports.test.ts tests/monitorInsights.test.ts tests/monitorReportPdf.test.ts tests/monitorIngestSchema.test.ts tests/monitorExecutiveReportPdf.test.ts tests/monitorScreenLabel.test.ts tests/httpResultClass.test.ts tests/featureFunnels.test.ts tests/reportSchedules.test.ts tests/reliability.test.ts tests/live.test.ts"
+    "test": "node --import tsx --test tests/sessionSummary.test.ts tests/slidingWindow.test.ts tests/incidents.test.ts tests/uptime.test.ts tests/syntheticPing.test.ts tests/sentryServiceMap.test.ts tests/sentrySpans.test.ts tests/sentryErrors.test.ts tests/monitorTenancy.test.ts tests/redactBodies.test.ts tests/monitorJourney.test.ts tests/monitorReports.test.ts tests/monitorInsights.test.ts tests/monitorReportPdf.test.ts tests/monitorIngestSchema.test.ts tests/monitorExecutiveReportPdf.test.ts tests/monitorScreenLabel.test.ts tests/httpResultClass.test.ts tests/featureFunnels.test.ts tests/reportSchedules.test.ts tests/reliability.test.ts tests/live.test.ts tests/reportQuality.test.ts tests/reliabilityTargets.test.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

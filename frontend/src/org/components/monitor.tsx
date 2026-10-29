@@ -111,6 +111,12 @@ export function ImpactBar({ score, label }: { score: number; label: string }) {
   );
 }
 
+const TARGET_LABEL: Record<string, { label: string; tone: string; dot: string }> = {
+  healthy: { label: "On target", tone: "text-emerald-700 dark:text-emerald-400", dot: "bg-emerald-500" },
+  degraded: { label: "Near target", tone: "text-amber-700 dark:text-amber-400", dot: "bg-amber-500" },
+  critical: { label: "Below target", tone: "text-red-700 dark:text-red-400", dot: "bg-red-500" },
+};
+
 export function SystemHealthStrip({
   availability,
   availabilityDelta,
@@ -118,6 +124,8 @@ export function SystemHealthStrip({
   latencyDelta,
   errorRate,
   errorRateDelta,
+  status,
+  targets,
 }: {
   availability: number;
   availabilityDelta: number | null;
@@ -125,8 +133,12 @@ export function SystemHealthStrip({
   latencyDelta: number | null;
   errorRate: number;
   errorRateDelta: number | null;
+  /** Server-computed status against the project's stage target. */
+  status?: string;
+  targets?: { phase: string; overall: number; longTerm: number };
 }) {
-  const health = healthLabel(availability, errorRate);
+  // With project targets the status is "on / near / below target"; otherwise fall back to fixed thresholds.
+  const health = targets && status && TARGET_LABEL[status] ? TARGET_LABEL[status] : healthLabel(availability, errorRate);
   return (
     <div className="rounded-2xl border border-zinc-200/80 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/60">
       <p className="mb-4 text-[11px] font-semibold uppercase tracking-widest text-zinc-400">
@@ -136,15 +148,20 @@ export function SystemHealthStrip({
         <div className="flex items-center gap-2">
           <span className={clsx("h-2.5 w-2.5 rounded-full", health.dot)} />
           <span className={clsx("text-lg font-semibold", health.tone)}>{health.label}</span>
+          {targets && (
+            <span className="text-xs text-zinc-500">
+              {targets.phase} target {(targets.overall * 100).toFixed(0)}% · long-term {(targets.longTerm * 100).toFixed(1)}%
+            </span>
+          )}
         </div>
         <MetricPill
-          label="Availability"
+          label="Service availability"
           value={`${(availability * 100).toFixed(2)}%`}
           delta={availabilityDelta}
         />
         <MetricPill label="API latency" value={`${avgLatencyMs}ms`} delta={latencyDelta} invert />
         <MetricPill
-          label="Error rate"
+          label="Service failure rate"
           value={`${(errorRate * 100).toFixed(2)}%`}
           delta={errorRateDelta}
           invert

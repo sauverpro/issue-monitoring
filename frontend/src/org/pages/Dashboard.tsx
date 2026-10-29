@@ -40,6 +40,7 @@ type ApiRequestRow = {
 
 type Dashboard = {
   hasEvents: boolean;
+  targets?: { phase: string; overall: number; longTerm: number };
   health: {
     status: string;
     availability: number;
@@ -179,7 +180,7 @@ export function DashboardPage() {
 
       <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">Selected period</h2>
       <div className="mb-6">
-        <SystemHealthStrip {...data.health} />
+        <SystemHealthStrip {...data.health} targets={data.targets} />
       </div>
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

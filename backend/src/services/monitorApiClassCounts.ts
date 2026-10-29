@@ -38,7 +38,7 @@ export async function apiClassCountsBySession(
             COUNT(*) FILTER (WHERE (${cls}) = 'client_failure')::text AS client_failure,
             COUNT(*) FILTER (WHERE (${cls}) = 'server_error')::text AS server_error,
             COUNT(*) FILTER (WHERE (${cls}) = 'network')::text AS network
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND session_id = ANY($2::text[])
      GROUP BY session_id`,
     [projectId, sessionIds]
@@ -71,7 +71,7 @@ export async function apiClassCountsByUser(
             COUNT(*) FILTER (WHERE (${cls}) = 'client_failure')::text AS client_failure,
             COUNT(*) FILTER (WHERE (${cls}) = 'server_error')::text AS server_error,
             COUNT(*) FILTER (WHERE (${cls}) = 'network')::text AS network
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1
        AND occurred_at >= $2 AND occurred_at <= $3
        AND ${USER_KEY_SQL} IS NOT NULL
@@ -103,7 +103,7 @@ export async function apiClassTotals(
        COUNT(*) FILTER (WHERE (${cls}) = 'client_failure')::text AS client_failure,
        COUNT(*) FILTER (WHERE (${cls}) = 'server_error')::text AS server_error,
        COUNT(*) FILTER (WHERE (${cls}) = 'network')::text AS network
-     FROM api_events
+     FROM api_events_real
      WHERE project_id = $1 AND occurred_at >= $2 AND occurred_at <= $3`,
     [projectId, from, to]
   );
